@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "principle": "Use one GPU-heavy local model at a time. Treat ComfyUI as the primary VRAM owner during image generation. Keep orchestration rule-based unless the user explicitly asks for more automation.",
+  "models": {
+    "qwen3:8b": {
+      "role": "deep_planner",
+      "persona": "Chief planner and synthesis writer",
+      "use_for": [
+        "multi-step planning",
+        "long-form writing",
+        "final synthesis",
+        "complex Korean/English reasoning"
+      ],
+      "constraints": [
+        "Use only when ComfyUI is closed or idle and free VRAM is above the 8B threshold.",
+        "Do not keep loaded after a short task unless the user asks."
+      ]
+    },
+    "qwen3:4b": {
+      "role": "fast_operator",
+      "persona": "Fast local operator",
+      "use_for": [
+        "short drafting",
+        "classification",
+        "routing",
+        "light RAG follow-up",
+        "status summaries"
+      ],
+      "constraints": [
+        "Preferred text model when ComfyUI may be used soon.",
+        "Default mixed-mode text model."
+      ]
+    },
+    "gemma3:4b": {
+      "role": "vision_reviewer",
+      "persona": "Visual reviewer",
+      "use_for": [
+        "screenshot understanding",
+        "image description",
+        "UI visual inspection"
+      ],
+      "constraints": [
+        "Use only when ComfyUI is idle or closed.",
+        "Queue vision requests while ComfyUI has the turn."
+      ]
+    },
+    "qwen3-embedding:0.6b": {
+      "role": "rag_indexer",
+      "persona": "Default embedding worker",
+      "use_for": [
+        "AnythingLLM RAG embeddings",
+        "Obsidian note embeddings",
+        "small document indexing"
+      ],
+      "constraints": [
+        "Default embedding model because it has the lowest resource pressure."
+      ]
+    },
+    "qwen3-embedding:4b": {
+      "role": "rag_indexer_high_quality",
+      "persona": "High quality embedding worker",
+      "use_for": [
+        "offline re-indexing",
+        "higher quality embedding experiments"
+      ],
+      "constraints": [
+        "Use only for explicit high-quality indexing sessions.",
+        "Avoid while ComfyUI is running."
+      ]
+    }
+  },
+  "agents": {
+    "resource_manager": {
+      "model_preference": "qwen3:4b",
+      "fallback": "rule_based",
+      "responsibility": "Read GPU, ComfyUI, Ollama, turn flags, and queue state before assigning work."
+    },
+    "planner": {
+      "model_preference": "qwen3:8b",
+      "fallback": "qwen3:4b",
+      "responsibility": "Turn a user request into stages, dependencies, and specialist handoffs."
+    },
+    "rag_librarian": {
+      "model_preference": "qwen3:8b",
+      "embedding": "qwen3-embedding:0.6b",
+      "responsibility": "Search workspace documents, cite evidence, and provide source-backed context."
+    },
+    "writer": {
+      "model_preference": "qwen3:4b",
+      "upgrade_to": "qwen3:8b",
+      "responsibility": "Draft, summarize, translate, and polish outputs."
+    },
+    "vision_reviewer": {
+      "model_preference": "gemma3:4b",
+      "responsibility": "Inspect screenshots and images, then return concise findings."
+    },
+    "comfyui_operator": {
+      "model_preference": "none",
+      "responsibility": "Reserve the GPU for ComfyUI generation and defer local LLM work until release."
+    }
+  },
+  "thread_templates": [
+    {
+      "key": "manager",
+      "title": "Manager - routing and queue",
+      "purpose": "Own the request plan, resource state, and final handoff."
+    },
+    {
+      "key": "rag",
+      "title": "RAG - evidence retrieval",
+      "purpose": "Collect document-grounded facts and citations."
+    },
+    {
+      "key": "writer",
+      "title": "Writer - synthesis",
+      "purpose": "Produce the user-facing answer or artifact."
+    },
+    {
+      "key": "vision",
+      "title": "Vision - screenshot review",
+      "purpose": "Inspect images or UI captures."
+    },
+    {
+      "key": "comfyui",
+      "title": "ComfyUI - generation queue",
+      "purpose": "Track image generation prompts and VRAM reservation."
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "min_vram_for_qwen8b": 6144,
+  "min_vram_for_qwen4b": 3584,
+  "default_context_length": 8192,
+  "keep_alive": "0",
+  "ollama_api": "http://127.0.0.1:11434",
+  "comfyui_api": "http://127.0.0.1:8188",
+  "comfyui_process_match": "ComfyUI",
+  "comfyui_start_command": "",
+  "comfyui_start_args": "",
+  "comfyui_lowvram_args": "--lowvram",
+  "comfyui_working_directory": "",
+  "queue_path": ".\\local-ai-task-queue.jsonl",
+  "state_path": ".\\local-ai-runtime-state.json",
+  "dashboard_path": ".\\local-ai-dashboard.html",
+  "respect_turn_flags": true,
+  "models": {
+    "qwen8b": "qwen3:8b",
+    "qwen4b": "qwen3:4b",
+    "gemmaVision": "gemma3:4b",
+    "embeddingSmall": "qwen3-embedding:0.6b",
+    "embeddingLarge": "qwen3-embedding:4b"
+  },
+  "ollama_stop_before_comfy": [
+    "qwen3:8b",
+    "qwen3:4b",
+    "gemma3:4b",
+    "qwen3-embedding:0.6b",
+    "qwen3-embedding:4b"
+  ]
+}

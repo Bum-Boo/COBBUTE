@@ -1,0 +1,20 @@
+# Installed desktop app bundle and local package caches
+AnythingLLM/
+
+# Python virtual environments and runtime data
+.venv/
+telegram-workbot/.venv/
+telegram-workbot/data/
+telegram-workbot/.env
+
+# Generated caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime logs/state/snapshots
+*.jsonl
+local-ai-runtime-state.json
+local-ai-dashboard.html
+local-ai-task-queue.jsonl
+
