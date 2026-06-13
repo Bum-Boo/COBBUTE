@@ -19,9 +19,9 @@ const CONFIG = {
   distro: process.env.HERMES_WSL_DISTRO || 'Ubuntu',
   dashboardUrl: process.env.HERMES_DASHBOARD_URL || 'http://127.0.0.1:9119',
   dashboardTaskName: process.env.HERMES_DASHBOARD_TASK_NAME || 'Hermes Dashboard 9119',
-  labUnc: process.env.HERMES_LAB_UNC || '\\\\wsl.localhost\\Ubuntu\\home',
-  labRoot: process.env.HERMES_LAB_ROOT || '$HOME/hermes-lab',
-  hermesHome: process.env.HERMES_HOME || '$HOME/hermes-lab/.hermes',
+  labUnc: process.env.HERMES_LAB_UNC || '',
+  labRoot: process.env.HERMES_LAB_ROOT || '',
+  hermesHome: process.env.HERMES_HOME || '',
   pollMs: Number(process.env.HERMES_CONTROLLER_POLL_MS || 15000)
 };
 
@@ -33,6 +33,14 @@ const SETTINGS_DEFAULTS = {
   serverCpuMax: 70,
   turnOffDisplayOnServer: true,
   serverPlanGuid: '',
+  // User-selected Hermes connection target. Keep path defaults empty so a
+  // downloaded controller does not assume a particular user's WSL layout.
+  wslDistro: process.env.HERMES_WSL_DISTRO || 'Ubuntu',
+  dashboardUrl: process.env.HERMES_DASHBOARD_URL || 'http://127.0.0.1:9119',
+  dashboardTaskName: process.env.HERMES_DASHBOARD_TASK_NAME || 'Hermes Dashboard 9119',
+  labUnc: process.env.HERMES_LAB_UNC || '',
+  labRoot: process.env.HERMES_LAB_ROOT || '',
+  hermesHome: process.env.HERMES_HOME || '',
   // Gateway watchdog
   autoRestartEnabled: false,
   autoRestartMax: 3
@@ -90,6 +98,10 @@ function psSingleQuote(value) {
   return String(value).replace(/'/g, "''");
 }
 
+function shQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
 function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
@@ -98,6 +110,12 @@ function clampInt(value, min, max, fallback) {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
+}
+
+function cleanString(value, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
 }
 
 function normalizeSettings(raw) {
@@ -109,8 +127,41 @@ function normalizeSettings(raw) {
     serverCpuMax: clampInt(base.serverCpuMax, 20, 100, SETTINGS_DEFAULTS.serverCpuMax),
     turnOffDisplayOnServer: base.turnOffDisplayOnServer !== false,
     serverPlanGuid: typeof base.serverPlanGuid === 'string' ? base.serverPlanGuid : '',
+    wslDistro: cleanString(base.wslDistro, SETTINGS_DEFAULTS.wslDistro),
+    dashboardUrl: cleanString(base.dashboardUrl, SETTINGS_DEFAULTS.dashboardUrl),
+    dashboardTaskName: cleanString(base.dashboardTaskName, SETTINGS_DEFAULTS.dashboardTaskName),
+    labUnc: cleanString(base.labUnc),
+    labRoot: cleanString(base.labRoot),
+    hermesHome: cleanString(base.hermesHome),
     autoRestartEnabled: base.autoRestartEnabled === true,
     autoRestartMax: clampInt(base.autoRestartMax, 1, 10, SETTINGS_DEFAULTS.autoRestartMax)
+  };
+}
+
+function applyConnectionSettings(settings) {
+  const normalized = normalizeSettings(settings);
+  CONFIG.distro = normalized.wslDistro;
+  CONFIG.dashboardUrl = normalized.dashboardUrl;
+  CONFIG.dashboardTaskName = normalized.dashboardTaskName;
+  CONFIG.labUnc = normalized.labUnc;
+  CONFIG.labRoot = normalized.labRoot;
+  CONFIG.hermesHome = normalized.hermesHome;
+  return CONFIG;
+}
+
+function isConnectionConfigured() {
+  return Boolean(CONFIG.distro && CONFIG.labRoot && CONFIG.hermesHome);
+}
+
+function connectionSummary() {
+  return {
+    configured: isConnectionConfigured(),
+    distro: CONFIG.distro,
+    dashboardUrl: CONFIG.dashboardUrl,
+    dashboardTaskName: CONFIG.dashboardTaskName,
+    labUnc: CONFIG.labUnc,
+    labRoot: CONFIG.labRoot,
+    hermesHome: CONFIG.hermesHome
   };
 }
 
@@ -347,9 +398,24 @@ async function getAppSettings() {
   const [settings, startup] = await Promise.all([readSettings(), getStartupState()]);
   return {
     ...settings,
+    connection: connectionSummary(),
     startupEnabled: startup.enabled,
     startupShortcutPath: startup.shortcutPath
   };
+}
+
+function recreateHermesClients() {
+  adapter = createHermesAdapter(runWsl, CONFIG);
+  if (logStreamer) {
+    logStreamer.stop();
+    logStreamer = createLogStreamer({
+      wslPath: wslPath(),
+      distro: CONFIG.distro,
+      hermesHome: CONFIG.hermesHome,
+      onLine: (name, line) => sendToWindow('hermes:logLine', { name, line }),
+      onEnd: (name) => sendToWindow('hermes:logEnd', { name })
+    });
+  }
 }
 
 async function updateAppSettings(patch = {}) {
@@ -358,16 +424,29 @@ async function updateAppSettings(patch = {}) {
   if (typeof patch.language === 'string') next.language = patch.language;
   if (typeof patch.autoServerEnabled === 'boolean') next.autoServerEnabled = patch.autoServerEnabled;
   if (typeof patch.turnOffDisplayOnServer === 'boolean') next.turnOffDisplayOnServer = patch.turnOffDisplayOnServer;
+  if (typeof patch.autoRestartEnabled === 'boolean') next.autoRestartEnabled = patch.autoRestartEnabled;
+  if (patch.autoRestartMax !== undefined) next.autoRestartMax = patch.autoRestartMax;
   if (patch.idleThresholdMinutes !== undefined) next.idleThresholdMinutes = patch.idleThresholdMinutes;
   if (patch.serverCpuMax !== undefined) next.serverCpuMax = patch.serverCpuMax;
+  for (const key of ['wslDistro', 'dashboardUrl', 'dashboardTaskName', 'labUnc', 'labRoot', 'hermesHome']) {
+    if (typeof patch[key] === 'string') next[key] = patch[key];
+  }
   writeSettings(next);
 
   if (typeof patch.startupEnabled === 'boolean') {
     await setStartupEnabled(patch.startupEnabled);
   }
 
-  // Re-apply CPU cap / threshold to a live server plan if those changed.
   const after = readSettings();
+  const connectionChanged = ['wslDistro', 'dashboardUrl', 'dashboardTaskName', 'labUnc', 'labRoot', 'hermesHome']
+    .some((key) => after[key] !== before[key]);
+  if (connectionChanged) {
+    applyConnectionSettings(after);
+    recreateHermesClients();
+    await publishStatus({ notify: false });
+  }
+
+  // Re-apply CPU cap / threshold to a live server plan if those changed.
   if (modeManager && (after.serverCpuMax !== before.serverCpuMax || after.idleThresholdMinutes !== before.idleThresholdMinutes)) {
     await modeManager.refreshConfig();
   }
@@ -407,8 +486,9 @@ async function getGatewayStatus(wslRunning) {
 }
 
 async function getAuthStatus(wslRunning) {
+  if (!isConnectionConfigured()) return 'not configured';
   if (!wslRunning) return 'WSL off';
-  const cmd = `cd ${CONFIG.labRoot} && HERMES_HOME=${CONFIG.hermesHome} hermes auth status openai-codex 2>&1 | head -n 1`;
+  const cmd = `cd ${shQuote(CONFIG.labRoot)} && HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes auth status openai-codex 2>&1 | head -n 1`;
   const result = await runWsl(cmd, 12000);
   const value = result.stdout.trim();
   if (/logged in/i.test(value)) return 'logged in';
@@ -416,6 +496,17 @@ async function getAuthStatus(wslRunning) {
 }
 
 async function getStatus() {
+  if (!isConnectionConfigured()) {
+    return {
+      wslRunning: false,
+      dashboardOnline: false,
+      gateway: 'not configured',
+      codexAuth: 'not configured',
+      ready: false,
+      connection: connectionSummary(),
+      checkedAt: new Date().toISOString()
+    };
+  }
   const [wslRunning, dashboardOnline] = await Promise.all([
     isWslRunning(),
     checkHttp(CONFIG.dashboardUrl)
@@ -431,6 +522,7 @@ async function getStatus() {
     gateway,
     codexAuth,
     ready,
+    connection: connectionSummary(),
     checkedAt: new Date().toISOString()
   };
 }
@@ -453,17 +545,19 @@ async function publishStatus({ notify = false } = {}) {
 }
 
 async function startHermes() {
+  if (!isConnectionConfigured()) return publishStatus({ notify: false });
   await runPowerShell(`Start-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000);
   await new Promise((resolve) => setTimeout(resolve, 3000));
-  await runWsl(`cd ${CONFIG.labRoot} && HERMES_HOME=${CONFIG.hermesHome} hermes gateway status >/dev/null 2>&1 || true`, 12000);
+  await runWsl(`cd ${shQuote(CONFIG.labRoot)} && HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway status >/dev/null 2>&1 || true`, 12000);
   const status = await publishStatus({ notify: true });
   new Notification({ title: 'Hermes Lab', body: 'Start command sent.' }).show();
   return status;
 }
 
 async function stopHermes() {
+  if (!isConnectionConfigured()) return publishStatus({ notify: false });
   await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000);
-  await runWsl(`systemctl --user stop hermes-dashboard.service >/dev/null 2>&1 || true; HERMES_HOME=${CONFIG.hermesHome} hermes gateway stop >/dev/null 2>&1 || systemctl --user stop hermes-gateway.service >/dev/null 2>&1 || true`, 15000);
+  await runWsl(`systemctl --user stop hermes-dashboard.service >/dev/null 2>&1 || true; HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || systemctl --user stop hermes-gateway.service >/dev/null 2>&1 || true`, 15000);
   await run(wslPath(), ['--terminate', CONFIG.distro], 15000);
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const status = await publishStatus({ notify: true });
@@ -476,9 +570,10 @@ async function stopHermes() {
 // which only terminates the Ubuntu distro. Stops the gateways first so they get
 // a chance to finalize sessions instead of being hard-killed mid-write.
 async function shutdownWsl() {
+  if (!isConnectionConfigured()) return publishStatus({ notify: false });
   await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
   // Best-effort graceful gateway stop before pulling the VM out from under them.
-  await runWsl(`HERMES_HOME=${CONFIG.hermesHome} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
+  await runWsl(`HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
   await run(wslPath(), ['--shutdown'], 25000);
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const status = await publishStatus({ notify: true });
@@ -646,7 +741,10 @@ ipcMain.handle('hermes:shutdownWsl', async () => {
   return { cancelled: false, status };
 });
 ipcMain.handle('hermes:openDashboard', () => shell.openExternal(CONFIG.dashboardUrl));
-ipcMain.handle('hermes:openLabFolder', () => shell.openPath(CONFIG.labUnc));
+ipcMain.handle('hermes:openLabFolder', () => {
+  if (!CONFIG.labUnc) return { ok: false, error: 'Lab folder path is not configured.' };
+  return shell.openPath(CONFIG.labUnc);
+});
 ipcMain.handle('hermes:getSettings', () => getAppSettings());
 ipcMain.handle('hermes:updateSettings', (_event, patch) => updateAppSettings(patch));
 
@@ -718,7 +816,7 @@ ipcMain.handle('hermes:setWslMemory', async (_event, gb, applyNow) => {
   let restarted = false;
   if (applyNow) {
     await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
-    await runWsl(`HERMES_HOME=${CONFIG.hermesHome} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
+    await runWsl(`HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
     await run(wslPath(), ['--shutdown'], 25000);
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await publishStatus({ notify: false });
@@ -729,6 +827,7 @@ ipcMain.handle('hermes:setWslMemory', async (_event, gb, applyNow) => {
 });
 
 app.whenReady().then(() => {
+  applyConnectionSettings(readSettings());
   adapter = createHermesAdapter(runWsl, CONFIG);
 
   modeManager = createModeManager({

@@ -15,8 +15,9 @@
 //   { ok, code, stdout, stderr, error }.
 
 function createHermesAdapter(runWsl, config) {
-  const home = config.hermesHome;
-  const envPrefix = `cd ${config.labRoot} && HERMES_HOME=${home} `;
+  const home = config.hermesHome || '';
+  const configured = Boolean(config.labRoot && config.hermesHome);
+  const envPrefix = configured ? `cd ${shellQuote(config.labRoot)} && HERMES_HOME=${shellQuote(home)} ` : '';
 
   const MODEL_OPTIONS = [
     { id: 'gpt-5.5', label: 'GPT-5.5', provider: 'openai-codex', baseUrl: 'https://chatgpt.com/backend-api/codex' },
@@ -35,6 +36,9 @@ function createHermesAdapter(runWsl, config) {
   ];
 
   function hermes(args, timeoutMs = 12000) {
+    if (!configured) {
+      return Promise.resolve({ ok: false, code: 1, stdout: '', stderr: 'Hermes connection is not configured.', error: 'Hermes connection is not configured.' });
+    }
     return runWsl(`${envPrefix}hermes ${args}`, timeoutMs);
   }
 
@@ -150,6 +154,7 @@ PY`;
 
   // List profiles, each enriched with gateway running state + platforms.
   async function listProfiles() {
+    if (!configured) return { ok: false, error: 'Hermes connection is not configured.', profiles: [] };
     const [listRes, stateRes, configRes] = await Promise.all([
       hermes('profile list', 12000),
       runWsl(b64wrap(dumpStatesCommand()), 10000),
@@ -201,6 +206,7 @@ PY`;
   }
 
   async function setProfileModelSettings(name, patch = {}) {
+    if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
     if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) {
       return { ok: false, error: 'invalid profile name' };
     }
@@ -241,6 +247,7 @@ PY`;
 
 
   async function listProfileBackups(name) {
+    if (!configured) return { ok: false, backups: [], error: 'Hermes connection is not configured.' };
     if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, backups: [], error: 'invalid profile name' };
     const script = `python3 - <<'PY'
 import json, os, re
@@ -266,6 +273,7 @@ PY`;
   }
 
   async function restoreProfileBackup(name, backupId) {
+    if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
     if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: 'invalid profile name' };
     if (!backupId || !/^[A-Za-z0-9_-]+$/.test(backupId) || !backupId.endsWith(`-${name}`)) return { ok: false, error: 'invalid backup id' };
     const script = [
@@ -285,6 +293,7 @@ PY`;
   }
 
   async function profileLogSummary(name) {
+    if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
     if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: 'invalid profile name' };
     const script = `python3 - <<'PY'
 import json, os, re
@@ -325,6 +334,7 @@ PY`;
 
   // Set the sticky default profile. Safe, idempotent.
   async function useProfile(name) {
+    if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
     const result = await hermes(`profile use ${shellQuote(name)}`, 12000);
     return { ok: result.ok, output: (result.stdout || result.stderr || '').trim() };
   }
@@ -338,6 +348,7 @@ PY`;
   // the gateway alive (this is how `sense` survives). The tmux window closes by
   // itself when the gateway stops, so no session leaks.
   async function gatewayStartProfile(name) {
+    if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
     const session = `gw-${name}`;
     const logDir = `${home}/profiles/${name}/logs`;
     const logFile = `${logDir}/gateway.controller.log`;
@@ -355,6 +366,7 @@ PY`;
 
   // Stop a specific profile's gateway via its pidfile.
   async function gatewayStopProfile(name) {
+    if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
     const result = await hermes(`--profile ${shellQuote(name)} gateway stop`, 20000);
     return { ok: result.ok, output: (result.stdout || result.stderr || '').trim() };
   }

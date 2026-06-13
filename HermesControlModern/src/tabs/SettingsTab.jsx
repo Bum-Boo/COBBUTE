@@ -139,9 +139,89 @@ function WslMemoryPanel({ onToast }) {
   );
 }
 
+function ConnectionPanel({ settings, settingsBusy, onUpdate, onToast }) {
+  const [draft, setDraft] = useState({
+    wslDistro: settings.wslDistro || 'Ubuntu',
+    labRoot: settings.labRoot || '',
+    hermesHome: settings.hermesHome || '',
+    labUnc: settings.labUnc || '',
+    dashboardUrl: settings.dashboardUrl || 'http://127.0.0.1:9119',
+    dashboardTaskName: settings.dashboardTaskName || 'Hermes Dashboard 9119'
+  });
+
+  useEffect(() => {
+    setDraft({
+      wslDistro: settings.wslDistro || 'Ubuntu',
+      labRoot: settings.labRoot || '',
+      hermesHome: settings.hermesHome || '',
+      labUnc: settings.labUnc || '',
+      dashboardUrl: settings.dashboardUrl || 'http://127.0.0.1:9119',
+      dashboardTaskName: settings.dashboardTaskName || 'Hermes Dashboard 9119'
+    });
+  }, [settings.wslDistro, settings.labRoot, settings.hermesHome, settings.labUnc, settings.dashboardUrl, settings.dashboardTaskName]);
+
+  const configured = Boolean(settings.labRoot && settings.hermesHome);
+  const setField = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
+  const save = async () => {
+    const next = await onUpdate(draft);
+    if (onToast) {
+      const ok = Boolean((next || draft).labRoot && (next || draft).hermesHome);
+      onToast(ok ? 'Hermes 연결 경로를 저장했습니다' : '연결 경로가 비어 있어 미설정 상태로 저장했습니다', ok ? 'ok' : 'warn', 6500);
+    }
+  };
+
+  return (
+    <Panel
+      icon={Settings}
+      title="Hermes 연결 경로"
+      subtitle={configured ? `현재 ${settings.wslDistro || 'Ubuntu'} · ${settings.labRoot}` : '처음 설치한 컴퓨터에서 본인의 WSL Hermes 경로를 지정합니다.'}
+    >
+      <div className="connection-notice">
+        기본값으로 특정 사용자 폴더를 가정하지 않습니다. 새 PC에서는 이 값을 저장한 뒤 상태 확인과 프로필 제어가 동작합니다.
+      </div>
+      <div className="settings-grid connection-grid">
+        <SettingRow title="WSL 배포판" hint="예: Ubuntu, Debian. Windows의 `wsl -l -v` 이름과 같아야 합니다.">
+          <input className="path-input" value={draft.wslDistro} disabled={settingsBusy} onChange={(e) => setField('wslDistro', e.target.value)} placeholder="Ubuntu" />
+        </SettingRow>
+
+        <SettingRow title="Hermes Lab Root" hint="WSL 내부 Hermes 작업 폴더. 예: /home/me/hermes-lab">
+          <input className="path-input" value={draft.labRoot} disabled={settingsBusy} onChange={(e) => setField('labRoot', e.target.value)} placeholder="/home/<user>/hermes-lab" />
+        </SettingRow>
+
+        <SettingRow title="Hermes Home" hint="프로필과 설정이 있는 Hermes home. 예: /home/me/hermes-lab/.hermes 또는 /home/me/.hermes">
+          <input className="path-input" value={draft.hermesHome} disabled={settingsBusy} onChange={(e) => setField('hermesHome', e.target.value)} placeholder="/home/<user>/.hermes" />
+        </SettingRow>
+
+        <SettingRow title="Windows에서 열 Lab 폴더" hint="선택값. 비워두면 폴더 열기 버튼만 비활성처럼 동작합니다.">
+          <input className="path-input" value={draft.labUnc} disabled={settingsBusy} onChange={(e) => setField('labUnc', e.target.value)} placeholder="\\\\wsl.localhost\\Ubuntu\\home\\<user>\\hermes-lab" />
+        </SettingRow>
+
+        <SettingRow title="Dashboard URL" hint="대부분 http://127.0.0.1:9119 입니다.">
+          <input className="path-input" value={draft.dashboardUrl} disabled={settingsBusy} onChange={(e) => setField('dashboardUrl', e.target.value)} placeholder="http://127.0.0.1:9119" />
+        </SettingRow>
+
+        <SettingRow title="Windows Scheduled Task" hint="Start 버튼이 실행할 작업 이름. 없으면 Dashboard 자동 시작만 실패할 수 있습니다.">
+          <input className="path-input" value={draft.dashboardTaskName} disabled={settingsBusy} onChange={(e) => setField('dashboardTaskName', e.target.value)} placeholder="Hermes Dashboard 9119" />
+        </SettingRow>
+      </div>
+
+      <div className="connection-actions">
+        <div className={`connection-state ${configured ? 'ok' : 'warn'}`}>
+          {configured ? '연결 경로 저장됨' : '연결 경로 미설정'}
+        </div>
+        <button className="gw-toggle start" disabled={settingsBusy} onClick={save}>
+          <Save size={15} /> 연결 경로 저장
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToast }) {
   return (
     <div className="settings-stack">
+      <ConnectionPanel settings={settings} settingsBusy={settingsBusy} onUpdate={onUpdate} onToast={onToast} />
+
       <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
         <div className="settings-grid">
           <SettingRow title={t.autoServerMode} hint={t.autoServerModeHint}>

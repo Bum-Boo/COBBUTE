@@ -25,6 +25,12 @@ const defaultSettings = {
   idleThresholdMinutes: 20,
   serverCpuMax: 70,
   turnOffDisplayOnServer: true,
+  wslDistro: 'Ubuntu',
+  dashboardUrl: 'http://127.0.0.1:9119',
+  dashboardTaskName: 'Hermes Dashboard 9119',
+  labUnc: '',
+  labRoot: '',
+  hermesHome: '',
   autoRestartEnabled: false,
   autoRestartMax: 3
 };
@@ -224,6 +230,7 @@ function App() {
     try {
       const next = await window.hermes.updateSettings(patch);
       setSettings({ ...defaultSettings, ...next });
+      return next;
     } finally { setSettingsBusy(false); }
   };
 
