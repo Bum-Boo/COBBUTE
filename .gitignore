@@ -11,10 +11,23 @@ telegram-workbot/.env
 __pycache__/
 *.py[cod]
 .pytest_cache/
+node_modules/
+HermesControlModern/preview.png
+HermesControlModern/dist/
+HermesControlModern/release/
+HermesControlModern/out/
+HermesControlModern/controller.config.json
+HermesControlModern/*.log
 
 # Local runtime logs/state/snapshots
 *.jsonl
+*.log
+*.out
+*.err
 local-ai-runtime-state.json
 local-ai-dashboard.html
 local-ai-task-queue.jsonl
-
+reports/
+.codex-remote-attachments/
+wsl-dashboard-start.out
+wsl-dashboard-start.err
