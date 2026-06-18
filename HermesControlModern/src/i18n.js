@@ -9,8 +9,8 @@ export const languageOptions = [
 ];
 
 const en = {
-  appName: 'Hermes Lab',
-  subtitle: 'Local WSL control center',
+  appName: 'AI Framework Controller',
+  subtitle: 'Hermes and OpenClaw local control center',
   connected: 'Connected',
   partial: 'Partial',
   stopped: 'Stopped',
@@ -33,6 +33,8 @@ const en = {
   loggedIn: 'Logged in',
   wslOff: 'WSL off',
   unknown: 'Unknown',
+  notInstalled: 'Not installed',
+  frameworks: 'Frameworks',
   start: 'Start',
   stop: 'Stop',
   labFolder: 'Lab Folder',
@@ -136,8 +138,8 @@ const en = {
 };
 
 const ko = {
-  appName: 'Hermes Lab',
-  subtitle: '로컬 WSL 제어 센터',
+  appName: 'AI Framework Controller',
+  subtitle: 'Hermes와 OpenClaw 로컬 제어 센터',
   connected: '연결됨',
   partial: '부분 연결',
   stopped: '중지됨',
@@ -160,6 +162,8 @@ const ko = {
   loggedIn: '로그인됨',
   wslOff: 'WSL 꺼짐',
   unknown: '알 수 없음',
+  notInstalled: '설치 안 됨',
+  frameworks: '프레임워크',
   start: '시작',
   stop: '중지',
   labFolder: 'Lab 폴더',

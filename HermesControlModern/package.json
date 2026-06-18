@@ -1,8 +1,8 @@
 {
-  "name": "hermes-lab-controller",
+  "name": "ai-framework-controller",
   "version": "0.2.0",
   "private": true,
-  "description": "Modern local controller for Hermes WSL lab",
+  "description": "Modern local controller for Hermes and OpenClaw frameworks",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5179",

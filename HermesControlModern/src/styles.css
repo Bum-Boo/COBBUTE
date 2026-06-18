@@ -42,6 +42,7 @@ button {
 
 .hero,
 .stat-card,
+.framework-card,
 .actions,
 .settings-panel {
   border: 1px solid var(--line);
@@ -220,6 +221,85 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.framework-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.framework-card {
+  min-height: 78px;
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.framework-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.framework-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: rgba(250, 250, 250, 0.08);
+  color: #d4d4d8;
+}
+
+.framework-card.ok .framework-icon { color: #86efac; background: rgba(34, 197, 94, 0.14); }
+.framework-card.warn .framework-icon { color: #fcd34d; background: rgba(245, 158, 11, 0.15); }
+.framework-card.off .framework-icon { color: #fca5a5; background: rgba(239, 68, 68, 0.14); }
+
+.framework-name {
+  color: #fafafa;
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.framework-meta {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.framework-meta span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.framework-meta span + span::before {
+  content: "·";
+  margin-right: 6px;
+  color: rgba(250, 250, 250, 0.28);
+}
+
+.framework-warn {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .actions {

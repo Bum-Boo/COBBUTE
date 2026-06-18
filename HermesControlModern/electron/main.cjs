@@ -7,11 +7,23 @@ const http = require('node:http');
 
 const power = require('./power.cjs');
 const { createHermesAdapter } = require('./hermes-adapter.cjs');
+const { createOpenClawAdapter } = require('./openclaw-adapter.cjs');
 const { createModeManager } = require('./mode-manager.cjs');
 const { createGatewayWatchdog } = require('./gateway-watchdog.cjs');
 const { createLogStreamer } = require('./log-streamer.cjs');
 
 app.disableHardwareAcceleration();
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.exit(0);
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      showWindow();
+    }
+  });
+}
 
 const ROOT = path.resolve(__dirname, '..');
 const HELPER_PS1 = path.join(__dirname, 'powercfg-helper.ps1');
@@ -54,7 +66,9 @@ let lastReady = null;
 let pollTimer = null;
 let modeManager = null;
 let adapter = null;
+let openclawAdapter = null;
 let watchdog = null;
+let watchdogRunning = false;
 let logStreamer = null;
 let currentStatus = null;
 let currentMode = null;
@@ -406,6 +420,7 @@ async function getAppSettings() {
 
 function recreateHermesClients() {
   adapter = createHermesAdapter(runWsl, CONFIG);
+  openclawAdapter = createOpenClawAdapter(runWsl);
   if (logStreamer) {
     logStreamer.stop();
     logStreamer = createLogStreamer({
@@ -530,12 +545,13 @@ async function getStatus() {
 async function publishStatus({ notify = false } = {}) {
   const status = await getStatus();
   currentStatus = status;
+  reconcileWatchdogWithStatus(status);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('hermes:statusChanged', status);
   }
   if (notify && lastReady !== null && lastReady !== status.ready) {
     new Notification({
-      title: status.ready ? 'Hermes connected' : 'Hermes disconnected',
+      title: status.ready ? 'AI Framework Controller connected' : 'AI Framework Controller disconnected',
       body: status.ready ? 'Dashboard and Codex OAuth are online.' : 'Hermes is stopped or partially disconnected.'
     }).show();
   }
@@ -544,13 +560,73 @@ async function publishStatus({ notify = false } = {}) {
   return status;
 }
 
+function reconcileWatchdogWithStatus(status) {
+  if (!watchdog) return;
+  if (status && status.wslRunning) {
+    startWatchdogIfNeeded();
+    return;
+  }
+  stopWatchdogIfRunning();
+}
+
+function startWatchdogIfNeeded() {
+  if (!watchdog || watchdogRunning) return;
+  watchdog.start();
+  watchdogRunning = true;
+}
+
+function stopWatchdogIfRunning() {
+  if (!watchdog || !watchdogRunning) return;
+  watchdog.stop();
+  watchdogRunning = false;
+}
+
+async function refreshProfilesIfWslRunning() {
+  if (!watchdog) return { ok: false, skipped: 'watchdog-not-ready' };
+  const wslRunning = currentStatus ? currentStatus.wslRunning : await isWslRunning();
+  if (!wslRunning) {
+    stopWatchdogIfRunning();
+    sendToWindow('hermes:profilesUpdated', { profiles: [], at: Date.now(), skipped: 'wsl-off' });
+    return { ok: true, skipped: 'wsl-off', profiles: [] };
+  }
+  startWatchdogIfNeeded();
+  return watchdog.refreshNow();
+}
+
+async function listProfilesIfWslRunning() {
+  if (!adapter) return { ok: false, error: 'adapter not ready', profiles: [] };
+  const wslRunning = currentStatus ? currentStatus.wslRunning : await isWslRunning();
+  if (!wslRunning) {
+    return { ok: true, skipped: 'wsl-off', profiles: [] };
+  }
+  return adapter.listProfiles();
+}
+
+async function listFrameworksIfWslRunning() {
+  const wslRunning = currentStatus ? currentStatus.wslRunning : await isWslRunning();
+  const hermesFramework = {
+    id: 'hermes',
+    name: 'Hermes',
+    kind: 'framework',
+    installed: isConnectionConfigured(),
+    gateway: { state: wslRunning ? (currentStatus ? currentStatus.gateway : 'unknown') : 'WSL off', running: Boolean(wslRunning && currentStatus && currentStatus.gateway === 'active') },
+    dashboardUrl: CONFIG.dashboardUrl,
+    warnings: isConnectionConfigured() ? [] : ['not-configured']
+  };
+  if (!wslRunning) {
+    return { ok: true, skipped: 'wsl-off', frameworks: [hermesFramework] };
+  }
+  const openclaw = openclawAdapter ? await openclawAdapter.getStatus() : { ok: false, framework: { id: 'openclaw', name: 'OpenClaw', installed: false, gateway: { state: 'unknown', running: false }, agents: [], warnings: ['adapter-not-ready'] } };
+  return { ok: true, frameworks: [hermesFramework, openclaw.framework] };
+}
+
 async function startHermes() {
   if (!isConnectionConfigured()) return publishStatus({ notify: false });
   await runPowerShell(`Start-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000);
   await new Promise((resolve) => setTimeout(resolve, 3000));
   await runWsl(`cd ${shQuote(CONFIG.labRoot)} && HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway status >/dev/null 2>&1 || true`, 12000);
   const status = await publishStatus({ notify: true });
-  new Notification({ title: 'Hermes Lab', body: 'Start command sent.' }).show();
+  new Notification({ title: 'AI Framework Controller', body: 'Start command sent.' }).show();
   return status;
 }
 
@@ -561,7 +637,7 @@ async function stopHermes() {
   await run(wslPath(), ['--terminate', CONFIG.distro], 15000);
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const status = await publishStatus({ notify: true });
-  new Notification({ title: 'Hermes Lab', body: 'Hermes and WSL Ubuntu were stopped.' }).show();
+  new Notification({ title: 'AI Framework Controller', body: 'Hermes and WSL Ubuntu were stopped.' }).show();
   return status;
 }
 
@@ -599,17 +675,17 @@ function applyTray() {
   const mode = currentMode;
 
   let color = '#6b7280';
-  let tip = 'Hermes Lab';
+  let tip = 'AI Framework Controller';
 
   if (mode && mode.transitioning) {
     color = '#eab308';
-    tip = 'Hermes Lab: switching mode…';
+    tip = 'AI Framework Controller: switching mode…';
   } else if (mode && mode.mode === 'server') {
     color = mode.trigger === 'manual' ? '#3b82f6' : '#38bdf8';
-    tip = mode.trigger === 'manual' ? 'Hermes Lab: server mode (manual)' : 'Hermes Lab: server mode (auto)';
+    tip = mode.trigger === 'manual' ? 'AI Framework Controller: server mode (manual)' : 'AI Framework Controller: server mode (auto)';
   } else if (status) {
     color = status.ready ? '#22c55e' : status.wslRunning ? '#f59e0b' : '#ef4444';
-    tip = status.ready ? 'Hermes Lab: connected' : status.wslRunning ? 'Hermes Lab: partial' : 'Hermes Lab: stopped';
+    tip = status.ready ? 'AI Framework Controller: connected' : status.wslRunning ? 'AI Framework Controller: partial' : 'AI Framework Controller: stopped';
   }
 
   tray.setImage(makeTrayImage(color));
@@ -667,7 +743,7 @@ function createWindow() {
     height: 820,
     minWidth: 860,
     minHeight: 720,
-    title: 'Hermes Lab Controller',
+    title: 'AI Framework Controller',
     backgroundColor: '#111317',
     show: false,
     webPreferences: {
@@ -683,8 +759,9 @@ function createWindow() {
     if (!process.argv.includes('--minimized')) {
       mainWindow.show();
     }
-    publishStatus();
-    if (watchdog) watchdog.refreshNow(); // push an initial profile snapshot to the freshly-loaded UI
+    publishStatus()
+      .then(() => refreshProfilesIfWslRunning())
+      .catch(() => {});
     if (process.argv.includes('--capture')) {
       setTimeout(async () => {
         const image = await mainWindow.webContents.capturePage();
@@ -753,7 +830,8 @@ ipcMain.handle('hermes:enterServerMode', () => (modeManager ? modeManager.enterS
 ipcMain.handle('hermes:exitServerMode', () => (modeManager ? modeManager.exitServerMode() : null));
 ipcMain.handle('hermes:getModeHistory', () => (modeManager ? modeManager.getHistory() : []));
 
-ipcMain.handle('hermes:getProfiles', () => (adapter ? adapter.listProfiles() : { ok: false, profiles: [] }));
+ipcMain.handle('hermes:getProfiles', () => listProfilesIfWslRunning());
+ipcMain.handle('hermes:getFrameworks', () => listFrameworksIfWslRunning());
 ipcMain.handle('hermes:getModelOptions', () => (adapter ? adapter.modelOptions() : { ok: false, models: [], reasoning: [] }));
 ipcMain.handle('hermes:setProfileModelSettings', (_event, name, patch) => setProfileModelSettings(name, patch));
 ipcMain.handle('hermes:getProfileOpsState', () => getProfileOpsState());
@@ -829,6 +907,7 @@ ipcMain.handle('hermes:setWslMemory', async (_event, gb, applyNow) => {
 app.whenReady().then(() => {
   applyConnectionSettings(readSettings());
   adapter = createHermesAdapter(runWsl, CONFIG);
+  openclawAdapter = createOpenClawAdapter(runWsl);
 
   modeManager = createModeManager({
     powerMonitor,
@@ -861,7 +940,6 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
   modeManager.start();
-  watchdog.start();
 
   pollTimer = setInterval(() => publishStatus({ notify: true }), CONFIG.pollMs);
 });

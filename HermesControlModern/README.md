@@ -1,6 +1,6 @@
-# Hermes Lab Controller Modern
+# AI Framework Controller
 
-Modern Electron + React controller for a local Hermes WSL lab.
+Modern Electron + React controller for local Hermes and OpenClaw framework operations.
 
 ## Run
 

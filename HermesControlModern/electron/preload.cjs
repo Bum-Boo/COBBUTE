@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('hermes', {
 
   // Profiles (with per-profile gateway control)
   getProfiles: () => ipcRenderer.invoke('hermes:getProfiles'),
+  getFrameworks: () => ipcRenderer.invoke('hermes:getFrameworks'),
   getModelOptions: () => ipcRenderer.invoke('hermes:getModelOptions'),
   setProfileModelSettings: (name, patch) => ipcRenderer.invoke('hermes:setProfileModelSettings', name, patch),
   getProfileOpsState: () => ipcRenderer.invoke('hermes:getProfileOpsState'),

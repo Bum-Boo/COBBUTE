@@ -44,6 +44,7 @@ function App() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [messageKey, setMessageKey] = useState('checking');
   const [tab, setTab] = useState('status');
+  const [frameworks, setFrameworks] = useState([]);
 
   // Lifted profile state (shared by Status summary + Profiles table + Logs).
   const [profiles, setProfiles] = useState([]);
@@ -84,6 +85,8 @@ function App() {
     const next = await window.hermes.getStatus();
     setStatus(next);
     setMessageKey(messageKeyForStatus(next));
+    const fw = await window.hermes.getFrameworks();
+    if (fw && Array.isArray(fw.frameworks)) setFrameworks(fw.frameworks);
   };
 
   const refreshHistory = async () => {
@@ -353,6 +356,7 @@ function App() {
           mode={mode}
           history={history}
           summary={profileSummary}
+          frameworks={frameworks}
           t={t}
           busy={busy}
           messageKey={messageKey}

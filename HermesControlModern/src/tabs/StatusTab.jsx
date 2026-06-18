@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, Bell, Bot, Clock, Cpu, ExternalLink, FolderOpen, Gauge,
-  History, MonitorOff, Moon, Power, PowerOff, RadioTower, RefreshCw, Send, Server, ShieldCheck,
+  History, MonitorOff, Moon, Network, Power, PowerOff, RadioTower, RefreshCw, Send, Server, ShieldCheck,
   Sun, Wifi, WifiOff, Zap
 } from 'lucide-react';
 import { StatCard, StatusBadge } from '../components.jsx';
@@ -146,7 +146,44 @@ function HistoryList({ history, t }) {
   );
 }
 
-export default function StatusTab({ status, mode, history, summary, t, busy, messageKey, onAction, onRefresh, onShutdownWsl, onEnterServer, onExitServer }) {
+function FrameworkCards({ frameworks, t }) {
+  if (!frameworks || frameworks.length === 0) return null;
+  const textForGateway = (framework) => {
+    const gateway = framework.gateway || {};
+    if (!framework.installed) return t.notInstalled || 'Not installed';
+    if (gateway.running) return t.running;
+    return gateway.state || t.unknown;
+  };
+  return (
+    <section className="framework-strip" aria-label={t.frameworks || 'Frameworks'}>
+      {frameworks.map((fw) => {
+        const isOpenClaw = fw.id === 'openclaw';
+        const Icon = isOpenClaw ? Network : Bot;
+        const agentCount = Array.isArray(fw.agents) ? fw.agents.length : null;
+        const warningCount = Array.isArray(fw.warnings) ? fw.warnings.length : 0;
+        const tone = !fw.installed ? 'off' : (fw.gateway && fw.gateway.running) ? 'ok' : warningCount > 0 ? 'warn' : 'neutral';
+        return (
+          <div key={fw.id || fw.name} className={`framework-card ${tone}`}>
+            <div className="framework-main">
+              <div className="framework-icon"><Icon size={18} /></div>
+              <div>
+                <div className="framework-name">{fw.name}</div>
+                <div className="framework-meta">
+                  <span>{textForGateway(fw)}</span>
+                  {agentCount !== null ? <span>{agentCount} agents</span> : null}
+                  {fw.version ? <span>{fw.version.replace(/^OpenClaw\s*/i, '')}</span> : null}
+                </div>
+              </div>
+            </div>
+            {warningCount > 0 ? <span className="framework-warn">{warningCount}</span> : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+export default function StatusTab({ status, mode, history, summary, frameworks, t, busy, messageKey, onAction, onRefresh, onShutdownWsl, onEnterServer, onExitServer }) {
   const heroClass = useMemo(() => {
     if (status.ready) return 'hero ready';
     if (status.wslRunning) return 'hero partial';
@@ -182,6 +219,8 @@ export default function StatusTab({ status, mode, history, summary, t, busy, mes
       </section>
 
       <ModeCard mode={mode} t={t} busy={busy} onEnter={onEnterServer} onExit={onExitServer} />
+
+      <FrameworkCards frameworks={frameworks} t={t} />
 
       <section className="grid">
         <StatCard
