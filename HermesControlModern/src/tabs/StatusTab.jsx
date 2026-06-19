@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, AlertTriangle, Bell, Bot, Clock, Cpu, ExternalLink, FolderOpen, Gauge,
+  Activity, AlertTriangle, Bell, Bot, ChevronDown, Clock, Cpu, ExternalLink, FolderOpen, Gauge,
   History, MonitorOff, Moon, Network, Power, PowerOff, RadioTower, RefreshCw, Send, Server, ShieldCheck,
   Sun, Wifi, WifiOff, Zap
 } from 'lucide-react';
@@ -184,6 +184,8 @@ function FrameworkCards({ frameworks, t }) {
 }
 
 export default function StatusTab({ status, mode, history, summary, frameworks, t, busy, messageKey, onAction, onRefresh, onShutdownWsl, onEnterServer, onExitServer }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   const heroClass = useMemo(() => {
     if (status.ready) return 'hero ready';
     if (status.wslRunning) return 'hero partial';
@@ -218,11 +220,9 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
         </div>
       </section>
 
-      <ModeCard mode={mode} t={t} busy={busy} onEnter={onEnterServer} onExit={onExitServer} />
-
       <FrameworkCards frameworks={frameworks} t={t} />
 
-      <section className="grid">
+      <section className="grid status-summary-grid">
         <StatCard
           icon={RadioTower}
           label="실행 중 게이트웨이"
@@ -241,14 +241,9 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
           value={summary ? `${summary.crashed}` : '…'}
           tone={summary && summary.crashed > 0 ? 'warn' : 'neutral'}
         />
-        <StatCard icon={Server} label={t.wslUbuntu} value={status.wslRunning ? t.running : t.stopped} tone={status.wslRunning ? 'ok' : 'off'} />
       </section>
 
-      <section className="grid sub-grid">
-        <StatCard icon={Activity} label={t.dashboard} value={status.dashboardOnline ? t.online : t.offline} tone={status.dashboardOnline ? 'ok' : 'off'} />
-        <StatCard icon={Bell} label={t.gateway} value={serviceLabel(status.gateway, t)} tone={status.gateway === 'active' ? 'ok' : 'neutral'} />
-        <StatCard icon={ShieldCheck} label={t.codexOAuth} value={serviceLabel(status.codexAuth, t)} tone={status.codexAuth === 'logged in' ? 'ok' : 'warn'} />
-      </section>
+      <ModeCard mode={mode} t={t} busy={busy} onEnter={onEnterServer} onExit={onExitServer} />
 
       <section className="actions">
         {status.wslRunning ? (
@@ -269,12 +264,25 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
         <button className="ghost" disabled={busy} onClick={() => window.hermes.openLabFolder()}>
           <FolderOpen size={18} /> {t.labFolder}
         </button>
+        <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={busy} onClick={() => setDetailsOpen((v) => !v)}>
+          <ChevronDown size={18} /> {detailsOpen ? '접기' : '자세히 보기'}
+        </button>
         <button className="icon-button" disabled={busy} onClick={onRefresh} title={t.refresh} aria-label={t.refresh}>
           <RefreshCw size={18} />
         </button>
       </section>
 
-      <HistoryList history={history} t={t} />
+      {detailsOpen ? (
+        <section className="status-details" aria-label="상세 상태">
+          <section className="grid sub-grid">
+            <StatCard icon={Server} label={t.wslUbuntu} value={status.wslRunning ? t.running : t.stopped} tone={status.wslRunning ? 'ok' : 'off'} />
+            <StatCard icon={Activity} label={t.dashboard} value={status.dashboardOnline ? t.online : t.offline} tone={status.dashboardOnline ? 'ok' : 'off'} />
+            <StatCard icon={Bell} label={t.gateway} value={serviceLabel(status.gateway, t)} tone={status.gateway === 'active' ? 'ok' : 'neutral'} />
+            <StatCard icon={ShieldCheck} label={t.codexOAuth} value={serviceLabel(status.codexAuth, t)} tone={status.codexAuth === 'logged in' ? 'ok' : 'warn'} />
+          </section>
+          <HistoryList history={history} t={t} />
+        </section>
+      ) : null}
     </>
   );
 }

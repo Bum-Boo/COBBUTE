@@ -15,6 +15,12 @@ const FILTERS = [
   { id: 'problems', label: '주의' }
 ];
 
+const FRAMEWORK_FILTERS = [
+  { id: 'all', label: '전체' },
+  { id: 'hermes', label: 'Hermes' },
+  { id: 'openclaw', label: 'OpenClaw' }
+];
+
 function PlatformBadge({ platform }) {
   const Icon = PLATFORM_ICON[platform.name] || MessageCircle;
   const connected = platform.state === 'connected';
@@ -256,6 +262,7 @@ function ProfileRow({ p, label, crashed, runtimeState, busy, onToggle, onRestart
       <span className="cell-name-stack">
         <span className="cell-name">
           {displayName}
+          <span className="framework-chip hermes">Hermes</span>
           {p.current ? <Star size={13} className="star" /> : null}
           {crashed ? <span className="crash-tag" title="실행 중이던 게이트웨이가 중단됨"><AlertTriangle size={11} /> 중단됨</span> : null}
           {runtimeState?.restartNeeded ? <span className="restart-tag">재시작 필요</span> : null}
@@ -278,14 +285,50 @@ function ProfileRow({ p, label, crashed, runtimeState, busy, onToggle, onRestart
   );
 }
 
+function OpenClawAgentRow({ agent, gatewayRunning, warnings = [] }) {
+  const issueCount = warnings.length;
+  return (
+    <div className={`prow openclaw-row ${gatewayRunning ? 'is-running' : ''} ${issueCount ? 'needs-attention' : ''}`}>
+      <span className={`run-dot ${gatewayRunning ? 'on' : ''}`} />
+      <span className="cell-name-stack">
+        <span className="cell-name">
+          {agent.name || agent.id || 'OpenClaw agent'}
+          <span className="framework-chip openclaw">OpenClaw</span>
+          {issueCount ? <span className="restart-tag">주의 {issueCount}</span> : null}
+        </span>
+        <span className="cell-tech-name">{agent.id || 'agent'}{agent.emoji ? ` · ${agent.emoji}` : ''}</span>
+      </span>
+      <span className="cell-muted profile-summary-cell">
+        <span>{agent.model || 'model 미지정'}</span>
+        <small>{agent.runtime || 'runtime 미지정'}</small>
+      </span>
+      <span className="cell-platforms">
+        <span className={`pf-badge ${gatewayRunning ? 'on' : 'off'}`}>
+          <Bot size={12} />
+          <span className="pf-name">gateway</span>
+          <span className="pf-dot" />
+        </span>
+      </span>
+      <span className="cell-action">
+        <span className="readonly-pill">읽기 전용</span>
+      </span>
+    </div>
+  );
+}
+
 export default function ProfilesTab({
-  t, profiles, labels, opsState = { runtime: {}, history: [], watchdog: null }, modelOptions = [], reasoningOptions = [], crashed, busyName, loading,
+  t, profiles, frameworks = [], labels, opsState = { runtime: {}, history: [], watchdog: null }, modelOptions = [], reasoningOptions = [], crashed, busyName, loading,
   onReload, onToggle, onRestart, onSetDefault, onUpdateModelSettings, onRestoreBackup, onLoadBackups, onLoadLogSummary, onSaveLabel
 }) {
   const [onlyRunning, setOnlyRunning] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [frameworkFilter, setFrameworkFilter] = useState('all');
   const [settingsProfileName, setSettingsProfileName] = useState('');
   const runtime = opsState.runtime || {};
+  const openclawFramework = frameworks.find((fw) => fw && fw.id === 'openclaw') || null;
+  const openclawAgents = Array.isArray(openclawFramework?.agents) ? openclawFramework.agents : [];
+  const openclawGatewayRunning = Boolean(openclawFramework?.gateway?.running);
+  const openclawWarnings = Array.isArray(openclawFramework?.warnings) ? openclawFramework.warnings : [];
 
   const rank = (p) => (crashed.has(p.name) ? 0 : runtime[p.name]?.restartNeeded ? 1 : p.running ? 2 : 3);
   const sorted = [...profiles].sort((a, b) => {
@@ -297,6 +340,7 @@ export default function ProfilesTab({
     return la.localeCompare(lb, 'ko');
   });
   const filtered = sorted.filter((p) => {
+    if (frameworkFilter === 'openclaw') return false;
     if (onlyRunning && !p.running) return false;
     if (filter === 'running') return p.running;
     if (filter === 'restart') return Boolean(runtime[p.name]?.restartNeeded);
@@ -305,26 +349,52 @@ export default function ProfilesTab({
     if (filter === 'problems') return crashed.has(p.name) || Boolean(runtime[p.name]?.restartNeeded) || (p.platforms || []).some((pf) => pf.state === 'error');
     return true;
   });
+  const filteredOpenClawAgents = openclawAgents.filter((agent) => {
+    if (frameworkFilter === 'hermes') return false;
+    if (onlyRunning && !openclawGatewayRunning) return false;
+    const modelText = `${agent.model || ''} ${agent.runtime || ''}`;
+    if (filter === 'running') return openclawGatewayRunning;
+    if (filter === 'restart') return false;
+    if (filter === 'codex') return /gpt-|codex/i.test(modelText);
+    if (filter === 'claude') return /claude/i.test(modelText);
+    if (filter === 'problems') return openclawWarnings.length > 0;
+    return true;
+  });
   const runningCount = profiles.filter((p) => p.running).length;
   const restartCount = profiles.filter((p) => runtime[p.name]?.restartNeeded).length;
+  const visibleCount = filtered.length + filteredOpenClawAgents.length;
+  const totalCount = profiles.length + openclawAgents.length;
   const settingsProfile = profiles.find((p) => p.name === settingsProfileName) || null;
 
+  const frameworkCounts = { all: totalCount, hermes: profiles.length, openclaw: openclawAgents.length };
   const action = (
     <div className="panel-actions profile-panel-actions">
-      <select className="profile-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
-        {FILTERS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-      </select>
+      <div className="framework-segment" role="group" aria-label="framework filter">
+        {FRAMEWORK_FILTERS.map((item) => (
+          <button key={item.id} type="button" className={frameworkFilter === item.id ? 'active' : ''} onClick={() => setFrameworkFilter(item.id)}>
+            <span>{item.label}</span>
+            <em>{frameworkCounts[item.id] || 0}</em>
+          </button>
+        ))}
+      </div>
+      <div className="profile-filter-wrap">
+        <span>보기</span>
+        <select className="profile-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          {FILTERS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+      </div>
       <label className="mini-toggle"><ToggleSwitch checked={onlyRunning} onChange={setOnlyRunning} label="실행 중만" /><span>실행 중만</span></label>
-      <button className="ghost small" disabled={loading} onClick={onReload} title="새로고침"><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button>
+      <button className="ghost small reload-soft" disabled={loading} onClick={onReload} title="새로고침"><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button>
     </div>
   );
 
   return (
     <>
-      <Panel icon={Bot} title={t.tabProfiles} subtitle={`${t.profilesSubtitle}  ·  ${runningCount}/${profiles.length} ${t.running}  ·  재시작 필요 ${restartCount}`} action={action}>
-        {filtered.length === 0 && !loading ? <div className="empty">{t.profilesEmpty}</div> : (
+      <Panel icon={Bot} title={t.tabProfiles} action={action}>
+        {visibleCount === 0 && !loading ? <div className="empty">{t.profilesEmpty}</div> : (
           <div className="table profiles-table">
-            {filtered.map((p) => <ProfileRow key={p.name} p={p} label={labels[p.name]} crashed={crashed.has(p.name)} runtimeState={runtime[p.name]} busy={busyName === p.name} onToggle={onToggle} onRestart={onRestart} onOpenSettings={(profile) => setSettingsProfileName(profile.name)} />)}
+            {filtered.map((p) => <ProfileRow key={`hermes-${p.name}`} p={p} label={labels[p.name]} crashed={crashed.has(p.name)} runtimeState={runtime[p.name]} busy={busyName === p.name} onToggle={onToggle} onRestart={onRestart} onOpenSettings={(profile) => setSettingsProfileName(profile.name)} />)}
+            {filteredOpenClawAgents.map((agent) => <OpenClawAgentRow key={`openclaw-${agent.id || agent.name}`} agent={agent} gatewayRunning={openclawGatewayRunning} warnings={openclawWarnings} />)}
           </div>
         )}
       </Panel>

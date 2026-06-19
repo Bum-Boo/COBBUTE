@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('hermes', {
   shutdownWsl: () => ipcRenderer.invoke('hermes:shutdownWsl'),
   openDashboard: () => ipcRenderer.invoke('hermes:openDashboard'),
   openLabFolder: () => ipcRenderer.invoke('hermes:openLabFolder'),
+  getAppInfo: () => ipcRenderer.invoke('hermes:getAppInfo'),
+  checkForUpdates: () => ipcRenderer.invoke('hermes:checkForUpdates'),
+  openReleasePage: () => ipcRenderer.invoke('hermes:openReleasePage'),
 
   // Settings
   getSettings: () => ipcRenderer.invoke('hermes:getSettings'),

@@ -18,8 +18,19 @@ const emptyStatus = {
   checkedAt: null
 };
 
+
+function applyThemePreference(theme) {
+  const normalized = theme === 'light' || theme === 'dark' ? theme : '';
+  if (normalized) {
+    document.documentElement.dataset.theme = normalized;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
 const defaultSettings = {
   language: 'ko',
+  theme: 'system',
   startupEnabled: false,
   autoServerEnabled: true,
   idleThresholdMinutes: 20,
@@ -61,6 +72,10 @@ function App() {
 
   const t = useMemo(() => makeStrings(settings.language), [settings.language]);
 
+  useEffect(() => {
+    applyThemePreference(settings.theme);
+  }, [settings.theme]);
+
   const pushToast = useCallback((msg, tone = 'info', ttl = 4500) => {
     const id = ++toastId.current;
     setToasts((prev) => [...prev.slice(-4), { id, msg, tone }]);
@@ -97,10 +112,11 @@ function App() {
   const loadProfiles = useCallback(async (spin = true) => {
     if (spin) setProfilesLoading(true);
     try {
-      const [result, lbls, ops] = await Promise.all([
+      const [result, lbls, ops, fw] = await Promise.all([
         window.hermes.getProfiles(),
         window.hermes.getProfileLabels(),
-        window.hermes.getProfileOpsState()
+        window.hermes.getProfileOpsState(),
+        window.hermes.getFrameworks()
       ]);
       if (result && result.ok) {
         const nextProfiles = result.profiles || [];
@@ -110,6 +126,7 @@ function App() {
         setProfiles(result.profiles);
         clearRecoveredCrashBadges(result.profiles);
       }
+      if (fw && Array.isArray(fw.frameworks)) setFrameworks(fw.frameworks);
       setLabels(lbls || {});
       if (ops) setOpsState({ runtime: ops.runtime || {}, history: ops.history || [], watchdog: ops.watchdog || null });
     } finally {
@@ -371,6 +388,7 @@ function App() {
         <ProfilesTab
           t={t}
           profiles={profiles}
+          frameworks={frameworks}
           labels={labels}
           modelOptions={modelOptions.models}
           reasoningOptions={modelOptions.reasoning}

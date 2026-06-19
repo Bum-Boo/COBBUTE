@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const https = require('node:https');
 
 const power = require('./power.cjs');
 const { createHermesAdapter } = require('./hermes-adapter.cjs');
@@ -12,6 +13,12 @@ const { createModeManager } = require('./mode-manager.cjs');
 const { createGatewayWatchdog } = require('./gateway-watchdog.cjs');
 const { createLogStreamer } = require('./log-streamer.cjs');
 
+// Keep the persisted controller identity stable even though the visible product
+// name changed from Hermes Lab Controller to AI Framework Controller. Electron's
+// default userData path follows the package/app name; without this, the renamed
+// app starts with an empty settings.json and reports Hermes/WSL as stopped even
+// while the existing Hermes services are running.
+app.setPath('userData', path.join(app.getPath('appData'), 'hermes-lab-controller'));
 app.disableHardwareAcceleration();
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -39,6 +46,7 @@ const CONFIG = {
 
 const SETTINGS_DEFAULTS = {
   language: 'ko',
+  theme: 'system',
   // Power / server-mode settings
   autoServerEnabled: true,
   idleThresholdMinutes: 20,
@@ -58,7 +66,11 @@ const SETTINGS_DEFAULTS = {
   autoRestartMax: 3
 };
 const SUPPORTED_LANGUAGES = new Set(['ko', 'zh', 'ja', 'en']);
+const SUPPORTED_THEMES = new Set(['system', 'light', 'dark']);
 const STARTUP_SHORTCUT_NAME = 'Hermes Lab Controller.lnk';
+const RELEASE_REPO = process.env.HERMES_CONTROLLER_RELEASE_REPO || 'Bum-Boo/COBBUTE';
+const RELEASES_URL = `https://github.com/${RELEASE_REPO}/releases`;
+const LATEST_RELEASE_URL = `${RELEASES_URL}/latest`;
 
 let mainWindow = null;
 let tray = null;
@@ -104,6 +116,97 @@ function runPowerShell(command, timeoutMs = 10000) {
   return run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], timeoutMs);
 }
 
+function requestJson(url, timeoutMs = 10000) {
+  return new Promise((resolve) => {
+    const req = https.get(url, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': `AI-Framework-Controller/${app.getVersion()}`
+      },
+      timeout: timeoutMs
+    }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          resolve({ ok: false, status: res.statusCode, error: `HTTP ${res.statusCode}` });
+          return;
+        }
+        try {
+          resolve({ ok: true, status: res.statusCode, data: JSON.parse(body) });
+        } catch (error) {
+          resolve({ ok: false, status: res.statusCode, error: error.message });
+        }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('request timed out')));
+    req.on('error', (error) => resolve({ ok: false, status: 0, error: error.message }));
+  });
+}
+
+function comparableVersion(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^v/i, '')
+    .split(/[+-]/)[0]
+    .split('.')
+    .map((part) => Number.parseInt(part, 10))
+    .filter((part) => Number.isFinite(part));
+}
+
+function compareVersions(a, b) {
+  const left = comparableVersion(a);
+  const right = comparableVersion(b);
+  const len = Math.max(left.length, right.length, 3);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function getAppInfo() {
+  return {
+    version: app.getVersion(),
+    releaseRepo: RELEASE_REPO,
+    releasesUrl: RELEASES_URL,
+    latestReleaseUrl: LATEST_RELEASE_URL
+  };
+}
+
+async function checkForUpdates() {
+  const currentVersion = app.getVersion();
+  const apiUrl = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
+  const result = await requestJson(apiUrl, 10000);
+  if (!result.ok) {
+    return {
+      ok: false,
+      currentVersion,
+      releaseRepo: RELEASE_REPO,
+      releasesUrl: RELEASES_URL,
+      latestReleaseUrl: LATEST_RELEASE_URL,
+      error: result.error || 'update check failed',
+      status: result.status || 0
+    };
+  }
+
+  const release = result.data || {};
+  const latestVersion = String(release.tag_name || '').replace(/^v/i, '') || currentVersion;
+  return {
+    ok: true,
+    currentVersion,
+    latestVersion,
+    hasUpdate: compareVersions(currentVersion, latestVersion) < 0,
+    releaseName: release.name || release.tag_name || latestVersion,
+    releaseUrl: release.html_url || LATEST_RELEASE_URL,
+    publishedAt: release.published_at || '',
+    assetCount: Array.isArray(release.assets) ? release.assets.length : 0,
+    releasesUrl: RELEASES_URL,
+    latestReleaseUrl: LATEST_RELEASE_URL
+  };
+}
+
 function runWsl(command, timeoutMs = 10000) {
   return run(wslPath(), ['-d', CONFIG.distro, '--', 'bash', '-lc', command], timeoutMs);
 }
@@ -136,6 +239,7 @@ function normalizeSettings(raw) {
   const base = { ...SETTINGS_DEFAULTS, ...(raw || {}) };
   return {
     language: SUPPORTED_LANGUAGES.has(base.language) ? base.language : SETTINGS_DEFAULTS.language,
+    theme: SUPPORTED_THEMES.has(base.theme) ? base.theme : SETTINGS_DEFAULTS.theme,
     autoServerEnabled: base.autoServerEnabled !== false,
     idleThresholdMinutes: clampInt(base.idleThresholdMinutes, 1, 240, SETTINGS_DEFAULTS.idleThresholdMinutes),
     serverCpuMax: clampInt(base.serverCpuMax, 20, 100, SETTINGS_DEFAULTS.serverCpuMax),
@@ -495,8 +599,17 @@ async function isWslRunning() {
 
 async function getGatewayStatus(wslRunning) {
   if (!wslRunning) return 'WSL off';
-  const result = await runWsl('systemctl --user is-active hermes-gateway.service 2>/dev/null || true', 8000);
-  const value = result.stdout.trim();
+  const cmd = [
+    'if systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then',
+    '  echo active;',
+    "elif systemctl --user list-units 'hermes-gateway*.service' --state=running --no-legend --no-pager 2>/dev/null | grep -q .; then",
+    '  echo active;',
+    'else',
+    "  systemctl --user is-active hermes-gateway.service 2>/dev/null || echo inactive;",
+    'fi'
+  ].join(' ');
+  const result = await runWsl(cmd, 8000);
+  const value = result.stdout.trim().split(/\r?\n/).filter(Boolean).pop();
   return value || 'unknown';
 }
 
@@ -822,6 +935,9 @@ ipcMain.handle('hermes:openLabFolder', () => {
   if (!CONFIG.labUnc) return { ok: false, error: 'Lab folder path is not configured.' };
   return shell.openPath(CONFIG.labUnc);
 });
+ipcMain.handle('hermes:getAppInfo', () => getAppInfo());
+ipcMain.handle('hermes:checkForUpdates', () => checkForUpdates());
+ipcMain.handle('hermes:openReleasePage', () => shell.openExternal(LATEST_RELEASE_URL));
 ipcMain.handle('hermes:getSettings', () => getAppSettings());
 ipcMain.handle('hermes:updateSettings', (_event, patch) => updateAppSettings(patch));
 

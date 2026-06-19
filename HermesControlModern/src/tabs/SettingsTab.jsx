@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Gauge, Languages, LifeBuoy, MemoryStick, MonitorOff, Moon, Power, RotateCcw, Save, Settings, Timer, Zap } from 'lucide-react';
+import { ChevronDown, ExternalLink, Gauge, Languages, LifeBuoy, MemoryStick, MonitorOff, Moon, Power, RefreshCw, RotateCcw, Save, Settings, Timer, Zap } from 'lucide-react';
 import { Panel, SettingRow, ToggleSwitch } from '../components.jsx';
-import { languageOptions } from '../i18n.js';
+import { languageOptions, themeOptions } from '../i18n.js';
 import LogTab from './LogTab.jsx';
 
 // Slider whose thumb tracks the drag locally and immediately (smooth, snaps to
@@ -217,120 +217,239 @@ function ConnectionPanel({ settings, settingsBusy, onUpdate, onToast }) {
   );
 }
 
+function BasicSettingsPanel({ settings, settingsBusy, t, onUpdate }) {
+  return (
+    <Panel icon={Settings} title={t.settings} subtitle={t.settingsSubtitle}>
+      <div className="settings-grid">
+        <SettingRow title={t.launchOnStartup} hint={t.launchOnStartupHint}>
+          <ToggleSwitch
+            checked={settings.startupEnabled}
+            disabled={settingsBusy}
+            label={t.launchOnStartup}
+            onChange={(v) => onUpdate({ startupEnabled: v })}
+          />
+        </SettingRow>
+
+        <label className="setting-row" htmlFor="theme-select">
+          <div className="setting-copy">
+            <span>{t.theme}</span>
+            <small>{t.themeHint}</small>
+          </div>
+          <div className="select-wrap">
+            <Moon size={17} />
+            <select
+              id="theme-select"
+              value={settings.theme || 'system'}
+              disabled={settingsBusy}
+              onChange={(event) => onUpdate({ theme: event.target.value })}
+            >
+              {themeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{t[option.labelKey]}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+
+        <label className="setting-row" htmlFor="language-select">
+          <div className="setting-copy">
+            <span>{t.language}</span>
+            <small>{t.languageHint}</small>
+          </div>
+          <div className="select-wrap">
+            <Languages size={17} />
+            <select
+              id="language-select"
+              value={settings.language}
+              disabled={settingsBusy}
+              onChange={(event) => onUpdate({ language: event.target.value })}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+      </div>
+    </Panel>
+  );
+}
+
+function UpdatePanel({ onToast }) {
+  const [appInfo, setAppInfo] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    window.hermes.getAppInfo().then((info) => {
+      if (active) setAppInfo(info || null);
+    }).catch(() => {
+      if (active) setAppInfo(null);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const check = async () => {
+    setBusy(true);
+    try {
+      const next = await window.hermes.checkForUpdates();
+      setUpdateInfo(next || null);
+      if (onToast) {
+        if (!next || !next.ok) {
+          const message = next && next.status === 404 ? 'GitHub 최신 릴리즈를 아직 찾지 못했습니다' : '업데이트 확인에 실패했습니다';
+          onToast(message, 'warn', 6500);
+        } else if (next.hasUpdate) onToast(`새 버전 ${next.latestVersion}을 받을 수 있습니다`, 'ok', 6500);
+        else onToast('이미 최신 버전입니다', 'ok');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openReleasePage = async () => {
+    await window.hermes.openReleasePage();
+  };
+
+  const version = appInfo?.version || updateInfo?.currentVersion || '확인 중';
+  const displayVersion = version === '확인 중' ? version : `v${version}`;
+  const releaseHint = appInfo?.releaseRepo ? `GitHub ${appInfo.releaseRepo} 릴리즈를 확인합니다.` : 'GitHub 릴리즈에서 새 버전을 확인합니다.';
+  let statusText = '아직 확인하지 않음';
+  let stateTone = 'warn';
+  if (updateInfo) {
+    if (!updateInfo.ok) {
+      statusText = updateInfo.status === 404 ? '릴리즈 없음' : '확인 실패';
+      stateTone = 'warn';
+    } else if (updateInfo.hasUpdate) {
+      statusText = `새 버전 ${updateInfo.latestVersion}`;
+      stateTone = 'ok';
+    } else {
+      statusText = '최신 버전';
+      stateTone = 'ok';
+    }
+  }
+
+  return (
+    <Panel icon={RefreshCw} title="업데이트" subtitle="새 버전이 있으면 다운로드 페이지를 엽니다. 자동으로 덮어쓰지는 않습니다.">
+      <div className="settings-grid">
+        <div className="setting-row">
+          <div className="setting-copy">
+            <span>현재 버전</span>
+            <small>{releaseHint}</small>
+          </div>
+          <strong>{displayVersion}</strong>
+        </div>
+      </div>
+
+      <div className="connection-actions">
+        <div className={`connection-state ${stateTone}`}>{statusText}</div>
+        <button className="ghost small" disabled={busy} onClick={check}>
+          <RefreshCw size={15} /> 최신 버전 확인
+        </button>
+        <button className="gw-toggle start" disabled={busy} onClick={openReleasePage}>
+          <ExternalLink size={15} /> 새 버전 다운로드
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToast }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <div className="settings-stack">
-      <ConnectionPanel settings={settings} settingsBusy={settingsBusy} onUpdate={onUpdate} onToast={onToast} />
+      <BasicSettingsPanel settings={settings} settingsBusy={settingsBusy} t={t} onUpdate={onUpdate} />
 
-      <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
-        <div className="settings-grid">
-          <SettingRow title={t.autoServerMode} hint={t.autoServerModeHint}>
-            <ToggleSwitch
-              checked={settings.autoServerEnabled}
-              disabled={settingsBusy}
-              label={t.autoServerMode}
-              onChange={(v) => onUpdate({ autoServerEnabled: v })}
-            />
-          </SettingRow>
+      <UpdatePanel onToast={onToast} />
 
-          <SettingRow title={t.displayOff} hint={t.displayOffHint}>
-            <ToggleSwitch
-              checked={settings.turnOffDisplayOnServer}
-              disabled={settingsBusy}
-              label={t.displayOff}
-              onChange={(v) => onUpdate({ turnOffDisplayOnServer: v })}
-            />
-          </SettingRow>
+      <section className="actions settings-details-actions">
+        <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={settingsBusy} onClick={() => setDetailsOpen((v) => !v)}>
+          <ChevronDown size={18} /> {detailsOpen ? '접기' : '자세히 보기'}
+        </button>
+      </section>
 
-          <SettingRow title={t.idleThreshold} hint={t.idleThresholdHint}>
-            <DebouncedSlider
-              icon={Timer}
-              min={1}
-              max={120}
-              step={1}
-              value={settings.idleThresholdMinutes}
-              disabled={!settings.autoServerEnabled}
-              unit={t.minutesUnit}
-              onCommit={(v) => onUpdate({ idleThresholdMinutes: v })}
-            />
-          </SettingRow>
+      {detailsOpen ? (
+        <section className="status-details" aria-label="상세 설정">
+          <ConnectionPanel settings={settings} settingsBusy={settingsBusy} onUpdate={onUpdate} onToast={onToast} />
 
-          <SettingRow title={t.cpuCapLabel} hint={t.cpuCapHint}>
-            <DebouncedSlider
-              icon={Gauge}
-              min={20}
-              max={100}
-              step={5}
-              value={settings.serverCpuMax}
-              unit={t.percentUnit}
-              onCommit={(v) => onUpdate({ serverCpuMax: v })}
-            />
-          </SettingRow>
-        </div>
-      </Panel>
+          <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
+            <div className="settings-grid">
+              <SettingRow title={t.autoServerMode} hint={t.autoServerModeHint}>
+                <ToggleSwitch
+                  checked={settings.autoServerEnabled}
+                  disabled={settingsBusy}
+                  label={t.autoServerMode}
+                  onChange={(v) => onUpdate({ autoServerEnabled: v })}
+                />
+              </SettingRow>
 
-      <Panel icon={LifeBuoy} title="게이트웨이 자동 복구" subtitle="크래시 감지는 항상 켜져 있고, 자동 재시작만 선택입니다.">
-        <div className="settings-grid">
-          <SettingRow title="크래시 시 자동 재시작" hint="실행 중이던 게이트웨이가 멈추면 자동으로 다시 시작합니다. (Hermes 자체 복구와 겹칠 수 있어 기본 꺼짐)">
-            <ToggleSwitch
-              checked={settings.autoRestartEnabled}
-              disabled={settingsBusy}
-              label="자동 재시작"
-              onChange={(v) => onUpdate({ autoRestartEnabled: v })}
-            />
-          </SettingRow>
+              <SettingRow title={t.displayOff} hint={t.displayOffHint}>
+                <ToggleSwitch
+                  checked={settings.turnOffDisplayOnServer}
+                  disabled={settingsBusy}
+                  label={t.displayOff}
+                  onChange={(v) => onUpdate({ turnOffDisplayOnServer: v })}
+                />
+              </SettingRow>
 
-          <SettingRow title="최대 재시도 횟수" hint="10분 안에 이 횟수만큼 재시도한 뒤 멈춥니다. 무한 루프 방지.">
-            <DebouncedSlider
-              icon={RotateCcw}
-              min={1}
-              max={10}
-              step={1}
-              value={settings.autoRestartMax}
-              disabled={!settings.autoRestartEnabled}
-              unit="회"
-              onCommit={(v) => onUpdate({ autoRestartMax: v })}
-            />
-          </SettingRow>
-        </div>
-      </Panel>
+              <SettingRow title={t.idleThreshold} hint={t.idleThresholdHint}>
+                <DebouncedSlider
+                  icon={Timer}
+                  min={1}
+                  max={120}
+                  step={1}
+                  value={settings.idleThresholdMinutes}
+                  disabled={!settings.autoServerEnabled}
+                  unit={t.minutesUnit}
+                  onCommit={(v) => onUpdate({ idleThresholdMinutes: v })}
+                />
+              </SettingRow>
 
-      <WslMemoryPanel onToast={onToast} />
-
-      <LogTab t={t} />
-
-      <Panel icon={Settings} title={t.settings} subtitle={t.settingsSubtitle}>
-        <div className="settings-grid">
-          <SettingRow title={t.launchOnStartup} hint={t.launchOnStartupHint}>
-            <ToggleSwitch
-              checked={settings.startupEnabled}
-              disabled={settingsBusy}
-              label={t.launchOnStartup}
-              onChange={(v) => onUpdate({ startupEnabled: v })}
-            />
-          </SettingRow>
-
-          <label className="setting-row" htmlFor="language-select">
-            <div className="setting-copy">
-              <span>{t.language}</span>
-              <small>{t.languageHint}</small>
+              <SettingRow title={t.cpuCapLabel} hint={t.cpuCapHint}>
+                <DebouncedSlider
+                  icon={Gauge}
+                  min={20}
+                  max={100}
+                  step={5}
+                  value={settings.serverCpuMax}
+                  unit={t.percentUnit}
+                  onCommit={(v) => onUpdate({ serverCpuMax: v })}
+                />
+              </SettingRow>
             </div>
-            <div className="select-wrap">
-              <Languages size={17} />
-              <select
-                id="language-select"
-                value={settings.language}
-                disabled={settingsBusy}
-                onChange={(event) => onUpdate({ language: event.target.value })}
-              >
-                {languageOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+          </Panel>
+
+          <Panel icon={LifeBuoy} title="게이트웨이 자동 복구" subtitle="크래시 감지는 항상 켜져 있고, 자동 재시작만 선택입니다.">
+            <div className="settings-grid">
+              <SettingRow title="크래시 시 자동 재시작" hint="실행 중이던 게이트웨이가 멈추면 자동으로 다시 시작합니다. (Hermes 자체 복구와 겹칠 수 있어 기본 꺼짐)">
+                <ToggleSwitch
+                  checked={settings.autoRestartEnabled}
+                  disabled={settingsBusy}
+                  label="자동 재시작"
+                  onChange={(v) => onUpdate({ autoRestartEnabled: v })}
+                />
+              </SettingRow>
+
+              <SettingRow title="최대 재시도 횟수" hint="10분 안에 이 횟수만큼 재시도한 뒤 멈춥니다. 무한 루프 방지.">
+                <DebouncedSlider
+                  icon={RotateCcw}
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={settings.autoRestartMax}
+                  disabled={!settings.autoRestartEnabled}
+                  unit="회"
+                  onCommit={(v) => onUpdate({ autoRestartMax: v })}
+                />
+              </SettingRow>
             </div>
-          </label>
-        </div>
-      </Panel>
+          </Panel>
+
+          <WslMemoryPanel onToast={onToast} />
+
+          <LogTab t={t} />
+        </section>
+      ) : null}
     </div>
   );
 }

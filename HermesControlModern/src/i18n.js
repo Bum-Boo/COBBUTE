@@ -8,6 +8,12 @@ export const languageOptions = [
   { value: 'en', label: 'English' }
 ];
 
+export const themeOptions = [
+  { value: 'system', labelKey: 'themeSystem' },
+  { value: 'light', labelKey: 'themeLight' },
+  { value: 'dark', labelKey: 'themeDark' }
+];
+
 const en = {
   appName: 'AI Framework Controller',
   subtitle: 'Hermes and OpenClaw local control center',
@@ -45,6 +51,11 @@ const en = {
   launchOnStartupHint: 'Start the controller minimized to the tray after Windows sign-in.',
   language: 'Language',
   languageHint: 'Choose the controller display language.',
+  theme: 'Theme',
+  themeHint: 'Choose whether the controller follows Windows or uses a fixed theme.',
+  themeSystem: 'System',
+  themeLight: 'Light',
+  themeDark: 'Dark',
   localOnly: 'Local only',
   lastChecked: 'Last checked',
 
@@ -79,7 +90,7 @@ const en = {
   historyEmpty: 'No mode changes yet.',
 
   // Profiles
-  profilesSubtitle: 'Hermes profiles and their gateway state.',
+  profilesSubtitle: 'Hermes profiles and OpenClaw agents.',
   model: 'Model',
   alias: 'Alias',
   distribution: 'Distribution',
@@ -174,6 +185,11 @@ const ko = {
   launchOnStartupHint: 'Windows 로그인 후 컨트롤러를 트레이에 최소화해서 띄웁니다.',
   language: '언어',
   languageHint: '컨트롤러 표시 언어를 선택합니다.',
+  theme: '테마',
+  themeHint: 'Windows 설정을 따르거나 밝음/어두움을 직접 고릅니다.',
+  themeSystem: '시스템',
+  themeLight: '밝음',
+  themeDark: '어두움',
   localOnly: '로컬 전용',
   lastChecked: '마지막 확인',
 
@@ -205,7 +221,7 @@ const ko = {
   modeHistory: '모드 히스토리',
   historyEmpty: '아직 모드 변경 기록이 없습니다.',
 
-  profilesSubtitle: 'Hermes 프로필과 게이트웨이 상태.',
+  profilesSubtitle: 'Hermes 프로필과 OpenClaw 에이전트.',
   model: '모델',
   alias: '별칭',
   distribution: '배포판',
@@ -295,6 +311,11 @@ const zh = {
   launchOnStartupHint: 'Windows 登录后在托盘中最小化启动控制器。',
   language: '语言',
   languageHint: '选择控制器显示语言。',
+  theme: '主题',
+  themeHint: '跟随系统，或固定为浅色/深色。',
+  themeSystem: '系统',
+  themeLight: '浅色',
+  themeDark: '深色',
   localOnly: '仅限本地',
   lastChecked: '上次检查',
 
@@ -347,6 +368,11 @@ const ja = {
   launchOnStartupHint: 'Windows ログイン後、コントローラーをトレイに最小化して起動します。',
   language: '言語',
   languageHint: 'コントローラーの表示言語を選択します。',
+  theme: 'テーマ',
+  themeHint: 'システムに従うか、ライト/ダークを固定します。',
+  themeSystem: 'システム',
+  themeLight: 'ライト',
+  themeDark: 'ダーク',
   localOnly: 'ローカルのみ',
   lastChecked: '最終確認',
 
