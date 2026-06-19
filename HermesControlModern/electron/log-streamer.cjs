@@ -53,7 +53,7 @@ if home.exists():
         elif fallback.exists():
             files.append((profile.name, fallback))
 if not files:
-    print('[all] 로그 파일을 찾지 못했습니다.', flush=True)
+    print('[all] No log files found.', flush=True)
     sys.exit(0)
 cmd = ['tail', '-n', '80', '-F'] + [str(path) for _, path in files]
 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors='replace')

@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2, Info, RefreshCw, X } from 'lucide-react';
 const TOAST_ICON = { ok: CheckCircle2, warn: AlertTriangle, err: AlertTriangle, info: Info, busy: RefreshCw };
 
 // Stacked transient notifications, bottom-right. Driven by App-level state.
-export function ToastStack({ toasts, onDismiss }) {
+export function ToastStack({ toasts, onDismiss, t }) {
   if (!toasts || toasts.length === 0) return null;
   return (
     <div className="toast-stack">
@@ -14,7 +14,7 @@ export function ToastStack({ toasts, onDismiss }) {
           <div key={toast.id} className={`toast ${toast.tone || 'info'}`} role="status">
             <Icon size={16} className={toast.tone === 'busy' ? 'spin' : ''} />
             <span className="toast-msg">{toast.msg}</span>
-            <button className="toast-x" onClick={() => onDismiss(toast.id)} aria-label="dismiss">
+            <button className="toast-x" onClick={() => onDismiss(toast.id)} aria-label={t?.dismiss || 'Dismiss'}>
               <X size={14} />
             </button>
           </div>

@@ -11,12 +11,12 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "electron": "latest",
-    "lucide-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "@vitejs/plugin-react": "6.0.2",
+    "electron": "42.3.3",
+    "lucide-react": "1.17.0",
+    "vite": "8.0.16",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {}
 }

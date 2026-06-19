@@ -12,6 +12,7 @@ const { createOpenClawAdapter } = require('./openclaw-adapter.cjs');
 const { createModeManager } = require('./mode-manager.cjs');
 const { createGatewayWatchdog } = require('./gateway-watchdog.cjs');
 const { createLogStreamer } = require('./log-streamer.cjs');
+const { makeMainStrings } = require('./i18n.cjs');
 
 // Keep the persisted controller identity stable even though the visible product
 // name changed from Hermes Lab Controller to AI Framework Controller. Electron's
@@ -291,6 +292,12 @@ function readSettings() {
   }
 }
 
+
+
+function mainStrings() {
+  return makeMainStrings(readSettings().language);
+}
+
 function writeSettings(nextSettings) {
   const normalized = normalizeSettings(nextSettings);
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
@@ -420,7 +427,7 @@ async function setProfileModelSettings(name, patch) {
       requiresRestart: Boolean(before && before.running)
     });
     if (before && before.running && fields.length) {
-      markProfileRestartNeeded(name, '모델/추론 설정 변경은 실행 중 gateway에 즉시 보장 적용되지 않음', fields);
+      markProfileRestartNeeded(name, mainStrings().restartReasonSettings, fields);
     }
   }
   return result;
@@ -442,7 +449,7 @@ async function restoreProfileBackup(name, backupId) {
       requiresRestart: Boolean(before && before.running)
     });
     if (before && before.running) {
-      markProfileRestartNeeded(name, 'config 백업 복원은 실행 중 gateway 재시작 후 확실히 반영됨', ['restore']);
+      markProfileRestartNeeded(name, mainStrings().restartReasonBackup, ['restore']);
     }
   }
   return result;
@@ -766,7 +773,7 @@ async function shutdownWsl() {
   await run(wslPath(), ['--shutdown'], 25000);
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const status = await publishStatus({ notify: true });
-  new Notification({ title: 'WSL', body: 'WSL을 완전히 종료했습니다. 메모리가 해제됩니다.' }).show();
+  new Notification({ title: 'WSL', body: mainStrings().wslShutdownNotice }).show();
   return status;
 }
 
@@ -909,19 +916,27 @@ async function getDiagnostics() {
 
 // --- IPC ---------------------------------------------------------------------
 
+function isValidProfileName(name) {
+  return typeof name === 'string' && /^[A-Za-z0-9_-]+$/.test(name);
+}
+
+function invalidProfileResult(extra = {}) {
+  return { ok: false, error: 'invalid profile name', ...extra };
+}
+
 ipcMain.handle('hermes:getStatus', () => publishStatus());
 ipcMain.handle('hermes:start', () => startHermes());
 ipcMain.handle('hermes:stop', () => stopHermes());
 ipcMain.handle('hermes:shutdownWsl', async () => {
   const opts = {
     type: 'warning',
-    buttons: ['WSL 종료', '취소'],
+    buttons: [mainStrings().wslShutdownButton, mainStrings().cancel],
     defaultId: 1,
     cancelId: 1,
     noLink: true,
-    title: 'WSL 완전 종료',
-    message: 'WSL을 완전히 종료할까요?',
-    detail: '실행 중인 모든 WSL 배포판과 게이트웨이가 즉시 중지되고 메모리가 해제됩니다. 다시 사용하려면 시작 버튼으로 재기동해야 합니다.'
+    title: mainStrings().wslShutdownTitle,
+    message: mainStrings().wslShutdownMessage,
+    detail: mainStrings().wslShutdownDetail
   };
   const { response } = mainWindow && !mainWindow.isDestroyed()
     ? await dialog.showMessageBox(mainWindow, opts)
@@ -949,14 +964,30 @@ ipcMain.handle('hermes:getModeHistory', () => (modeManager ? modeManager.getHist
 ipcMain.handle('hermes:getProfiles', () => listProfilesIfWslRunning());
 ipcMain.handle('hermes:getFrameworks', () => listFrameworksIfWslRunning());
 ipcMain.handle('hermes:getModelOptions', () => (adapter ? adapter.modelOptions() : { ok: false, models: [], reasoning: [] }));
-ipcMain.handle('hermes:setProfileModelSettings', (_event, name, patch) => setProfileModelSettings(name, patch));
+ipcMain.handle('hermes:setProfileModelSettings', (_event, name, patch) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
+  return setProfileModelSettings(name, patch);
+});
 ipcMain.handle('hermes:getProfileOpsState', () => getProfileOpsState());
-ipcMain.handle('hermes:getProfileBackups', (_event, name) => (adapter ? adapter.listProfileBackups(name) : { ok: false, backups: [] }));
-ipcMain.handle('hermes:restoreProfileBackup', (_event, name, backupId) => restoreProfileBackup(name, backupId));
-ipcMain.handle('hermes:getProfileLogSummary', (_event, name) => (adapter ? adapter.profileLogSummary(name) : { ok: false }));
-ipcMain.handle('hermes:useProfile', (_event, name) => (adapter ? adapter.useProfile(name) : { ok: false }));
+ipcMain.handle('hermes:getProfileBackups', (_event, name) => {
+  if (!isValidProfileName(name)) return invalidProfileResult({ backups: [] });
+  return adapter ? adapter.listProfileBackups(name) : { ok: false, backups: [] };
+});
+ipcMain.handle('hermes:restoreProfileBackup', (_event, name, backupId) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
+  return restoreProfileBackup(name, backupId);
+});
+ipcMain.handle('hermes:getProfileLogSummary', (_event, name) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
+  return adapter ? adapter.profileLogSummary(name) : { ok: false };
+});
+ipcMain.handle('hermes:useProfile', (_event, name) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
+  return adapter ? adapter.useProfile(name) : { ok: false };
+});
 
 ipcMain.handle('hermes:gatewayStart', async (_event, name) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
   if (!adapter) return { ok: false };
   if (watchdog) watchdog.setDesired(name, true); // mark intent before acting
   const result = await adapter.gatewayStartProfile(name);
@@ -969,6 +1000,7 @@ ipcMain.handle('hermes:gatewayStart', async (_event, name) => {
 });
 
 ipcMain.handle('hermes:gatewayStop', async (_event, name) => {
+  if (!isValidProfileName(name)) return invalidProfileResult();
   if (!adapter) return { ok: false };
   if (watchdog) watchdog.setDesired(name, false); // suppress crash detection for this stop
   const result = await adapter.gatewayStopProfile(name);
@@ -981,7 +1013,10 @@ ipcMain.handle('hermes:getDiagnostics', () => getDiagnostics());
 ipcMain.handle('hermes:getRequestsElevated', () => power.getPowerRequestsElevated(HELPER_PS1));
 
 ipcMain.handle('hermes:getProfileLabels', () => readProfileLabels());
-ipcMain.handle('hermes:setProfileLabel', (_event, name, label, desc) => writeProfileLabel(name, label, desc));
+ipcMain.handle('hermes:setProfileLabel', (_event, name, label, desc) => {
+  if (!isValidProfileName(name)) return readProfileLabels();
+  return writeProfileLabel(name, label, desc);
+});
 
 ipcMain.handle('hermes:logStart', (_event, name) => (logStreamer ? logStreamer.start(name) : { ok: false }));
 ipcMain.handle('hermes:logStop', () => { if (logStreamer) logStreamer.stop(); return { ok: true }; });
@@ -1015,7 +1050,7 @@ ipcMain.handle('hermes:setWslMemory', async (_event, gb, applyNow) => {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await publishStatus({ notify: false });
     restarted = true;
-    new Notification({ title: 'WSL 메모리 설정', body: value ? `WSL 메모리를 ${value}로 적용했습니다 (WSL 재시작됨).` : 'WSL 메모리 제한을 해제했습니다 (WSL 재시작됨).' }).show();
+    new Notification({ title: mainStrings().wslMemoryTitle, body: mainStrings().wslMemoryApplied(value) }).show();
   }
   return { ...res, restarted };
 });
@@ -1042,7 +1077,8 @@ app.whenReady().then(() => {
     getConfig: () => readSettings(),
     onEvent: (event) => sendToWindow('hermes:gatewayEvent', event),
     onProfiles: (payload) => sendToWindow('hermes:profilesUpdated', payload),
-    notify: ({ title, body }) => new Notification({ title, body }).show()
+    notify: ({ title, body }) => new Notification({ title, body }).show(),
+    getText: () => mainStrings()
   });
 
   logStreamer = createLogStreamer({

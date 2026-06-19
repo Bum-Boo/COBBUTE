@@ -60,8 +60,8 @@ function DebouncedSlider({ icon: Icon, min, max, step, value, disabled, unit, on
 
 // WSL RAM allocation editor. Writes %USERPROFILE%\.wslconfig ([wsl2] memory=NGB).
 // Changes need a `wsl --shutdown` to take effect — offered as a separate
-// "지금 적용" button so saving and restarting are distinct choices.
-function WslMemoryPanel({ onToast }) {
+// "Apply now" button so saving and restarting are distinct choices.
+function WslMemoryPanel({ t, onToast }) {
   const [info, setInfo] = useState(null); // { totalGb, currentGb, raw, exists }
   const [limit, setLimit] = useState(true); // false => auto (no memory= line)
   const [gb, setGb] = useState(8);
@@ -84,14 +84,14 @@ function WslMemoryPanel({ onToast }) {
   const maxGb = info ? Math.max(4, info.totalGb - 2) : 32; // leave headroom for Windows
 
   const save = async (applyNow) => {
-    if (applyNow && !window.confirm('WSL을 지금 재시작해서 새 메모리 설정을 적용할까요?\n실행 중인 게이트웨이가 잠시 중지됩니다.')) return;
+    if (applyNow && !window.confirm(t.wslRestartApplyConfirm)) return;
     setBusy(true);
     try {
       const value = limit ? gb : 0; // 0 => clear the limit (WSL auto-default)
       const res = await window.hermes.setWslMemory(value, applyNow);
       if (onToast) {
-        if (res && res.restarted) onToast(limit ? `WSL 메모리 ${gb}GB 적용 완료` : 'WSL 메모리 제한 해제 (적용됨)', 'ok');
-        else onToast(limit ? `WSL 메모리 ${gb}GB 저장됨 · WSL 재시작 후 적용` : 'WSL 메모리 제한 해제 저장됨', 'info', 6000);
+        if (res && res.restarted) onToast(limit ? t.wslMemoryApplied(gb) : t.wslMemoryLimitRemovedApplied, 'ok');
+        else onToast(limit ? t.wslMemorySavedRestart(gb) : t.wslMemoryLimitRemovedSaved, 'info', 6000);
       }
       await reload();
     } finally {
@@ -102,15 +102,15 @@ function WslMemoryPanel({ onToast }) {
   return (
     <Panel
       icon={MemoryStick}
-      title="WSL 메모리 할당"
-      subtitle={info ? `이 PC 총 RAM ${info.totalGb}GB · 현재 설정 ${info.raw || '자동(기본 50%)'}` : 'WSL에 할당할 최대 메모리'}
+      title={t.wslMemoryTitle}
+      subtitle={info ? t.wslMemorySubtitle(info.totalGb, info.raw) : t.wslMemorySubtitleLoading}
     >
       <div className="settings-grid">
-        <SettingRow title="메모리 직접 제한" hint="끄면 WSL이 자동으로 관리합니다(기본: 전체 RAM의 50%).">
-          <ToggleSwitch checked={limit} disabled={busy} label="메모리 직접 제한" onChange={setLimit} />
+        <SettingRow title={t.memoryDirectLimit} hint={t.memoryDirectLimitHint}>
+          <ToggleSwitch checked={limit} disabled={busy} label={t.memoryDirectLimit} onChange={setLimit} />
         </SettingRow>
 
-        <SettingRow title="할당할 최대 메모리" hint={`2GB ~ ${maxGb}GB (Windows용 여유를 남깁니다).`}>
+        <SettingRow title={t.maxMemory} hint={t.maxMemoryHint(maxGb)}>
           <DebouncedSlider
             icon={MemoryStick}
             min={2}
@@ -126,20 +126,20 @@ function WslMemoryPanel({ onToast }) {
 
       <div className="wsl-mem-actions">
         <div className="wsl-mem-note">
-          변경 사항은 <strong>WSL 재시작</strong> 후에 적용됩니다.
+          {t.changesApplyAfterWslRestart}
         </div>
         <button className="ghost small" disabled={busy} onClick={() => save(false)}>
-          <Save size={15} /> 저장
+          <Save size={15} /> {t.save}
         </button>
         <button className="gw-toggle start" disabled={busy} onClick={() => save(true)}>
-          <Zap size={15} /> 저장하고 지금 적용
+          <Zap size={15} /> {t.saveAndApplyNow}
         </button>
       </div>
     </Panel>
   );
 }
 
-function ConnectionPanel({ settings, settingsBusy, onUpdate, onToast }) {
+function ConnectionPanel({ settings, settingsBusy, t, onUpdate, onToast }) {
   const [draft, setDraft] = useState({
     wslDistro: settings.wslDistro || 'Ubuntu',
     labRoot: settings.labRoot || '',
@@ -166,51 +166,51 @@ function ConnectionPanel({ settings, settingsBusy, onUpdate, onToast }) {
     const next = await onUpdate(draft);
     if (onToast) {
       const ok = Boolean((next || draft).labRoot && (next || draft).hermesHome);
-      onToast(ok ? 'Hermes 연결 경로를 저장했습니다' : '연결 경로가 비어 있어 미설정 상태로 저장했습니다', ok ? 'ok' : 'warn', 6500);
+      onToast(ok ? t.connectionSavedToast : t.connectionMissingToast, ok ? 'ok' : 'warn', 6500);
     }
   };
 
   return (
     <Panel
       icon={Settings}
-      title="Hermes 연결 경로"
-      subtitle={configured ? `현재 ${settings.wslDistro || 'Ubuntu'} · ${settings.labRoot}` : '처음 설치한 컴퓨터에서 본인의 WSL Hermes 경로를 지정합니다.'}
+      title={t.connectionTitle}
+      subtitle={configured ? t.connectionSubtitleConfigured(settings.wslDistro, settings.labRoot) : t.connectionSubtitleUnconfigured}
     >
       <div className="connection-notice">
-        기본값으로 특정 사용자 폴더를 가정하지 않습니다. 새 PC에서는 이 값을 저장한 뒤 상태 확인과 프로필 제어가 동작합니다.
+        {t.connectionNotice}
       </div>
       <div className="settings-grid connection-grid">
-        <SettingRow title="WSL 배포판" hint="예: Ubuntu, Debian. Windows의 `wsl -l -v` 이름과 같아야 합니다.">
+        <SettingRow title={t.wslDistro} hint={t.wslDistroHint}>
           <input className="path-input" value={draft.wslDistro} disabled={settingsBusy} onChange={(e) => setField('wslDistro', e.target.value)} placeholder="Ubuntu" />
         </SettingRow>
 
-        <SettingRow title="Hermes Lab Root" hint="WSL 내부 Hermes 작업 폴더. 예: /home/me/hermes-lab">
+        <SettingRow title={t.hermesLabRoot} hint={t.hermesLabRootHint}>
           <input className="path-input" value={draft.labRoot} disabled={settingsBusy} onChange={(e) => setField('labRoot', e.target.value)} placeholder="/home/<user>/hermes-lab" />
         </SettingRow>
 
-        <SettingRow title="Hermes Home" hint="프로필과 설정이 있는 Hermes home. 예: /home/me/hermes-lab/.hermes 또는 /home/me/.hermes">
+        <SettingRow title={t.hermesHome} hint={t.hermesHomeHint}>
           <input className="path-input" value={draft.hermesHome} disabled={settingsBusy} onChange={(e) => setField('hermesHome', e.target.value)} placeholder="/home/<user>/.hermes" />
         </SettingRow>
 
-        <SettingRow title="Windows에서 열 Lab 폴더" hint="선택값. 비워두면 폴더 열기 버튼만 비활성처럼 동작합니다.">
+        <SettingRow title={t.windowsLabFolder} hint={t.windowsLabFolderHint}>
           <input className="path-input" value={draft.labUnc} disabled={settingsBusy} onChange={(e) => setField('labUnc', e.target.value)} placeholder="\\\\wsl.localhost\\Ubuntu\\home\\<user>\\hermes-lab" />
         </SettingRow>
 
-        <SettingRow title="Dashboard URL" hint="대부분 http://127.0.0.1:9119 입니다.">
+        <SettingRow title={t.dashboardUrlLabel} hint={t.dashboardUrlHint}>
           <input className="path-input" value={draft.dashboardUrl} disabled={settingsBusy} onChange={(e) => setField('dashboardUrl', e.target.value)} placeholder="http://127.0.0.1:9119" />
         </SettingRow>
 
-        <SettingRow title="Windows Scheduled Task" hint="Start 버튼이 실행할 작업 이름. 없으면 Dashboard 자동 시작만 실패할 수 있습니다.">
+        <SettingRow title={t.dashboardTask} hint={t.dashboardTaskHint}>
           <input className="path-input" value={draft.dashboardTaskName} disabled={settingsBusy} onChange={(e) => setField('dashboardTaskName', e.target.value)} placeholder="Hermes Dashboard 9119" />
         </SettingRow>
       </div>
 
       <div className="connection-actions">
         <div className={`connection-state ${configured ? 'ok' : 'warn'}`}>
-          {configured ? '연결 경로 저장됨' : '연결 경로 미설정'}
+          {configured ? t.connectionSavedState : t.connectionMissingState}
         </div>
         <button className="gw-toggle start" disabled={settingsBusy} onClick={save}>
-          <Save size={15} /> 연결 경로 저장
+          <Save size={15} /> {t.saveConnection}
         </button>
       </div>
     </Panel>
@@ -274,7 +274,7 @@ function BasicSettingsPanel({ settings, settingsBusy, t, onUpdate }) {
   );
 }
 
-function UpdatePanel({ onToast }) {
+function UpdatePanel({ t, onToast }) {
   const [appInfo, setAppInfo] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -296,10 +296,10 @@ function UpdatePanel({ onToast }) {
       setUpdateInfo(next || null);
       if (onToast) {
         if (!next || !next.ok) {
-          const message = next && next.status === 404 ? 'GitHub 최신 릴리즈를 아직 찾지 못했습니다' : '업데이트 확인에 실패했습니다';
+          const message = next && next.status === 404 ? t.updateMissingToast : t.updateFailedToast;
           onToast(message, 'warn', 6500);
-        } else if (next.hasUpdate) onToast(`새 버전 ${next.latestVersion}을 받을 수 있습니다`, 'ok', 6500);
-        else onToast('이미 최신 버전입니다', 'ok');
+        } else if (next.hasUpdate) onToast(t.updateAvailableToast(next.latestVersion), 'ok', 6500);
+        else onToast(t.updateCurrentToast, 'ok');
       }
     } finally {
       setBusy(false);
@@ -310,30 +310,30 @@ function UpdatePanel({ onToast }) {
     await window.hermes.openReleasePage();
   };
 
-  const version = appInfo?.version || updateInfo?.currentVersion || '확인 중';
-  const displayVersion = version === '확인 중' ? version : `v${version}`;
-  const releaseHint = appInfo?.releaseRepo ? `GitHub ${appInfo.releaseRepo} 릴리즈를 확인합니다.` : 'GitHub 릴리즈에서 새 버전을 확인합니다.';
-  let statusText = '아직 확인하지 않음';
+  const version = appInfo?.version || updateInfo?.currentVersion || t.checkingVersion;
+  const displayVersion = version === t.checkingVersion ? version : `v${version}`;
+  const releaseHint = t.releaseHint(appInfo?.releaseRepo);
+  let statusText = t.updateNotChecked;
   let stateTone = 'warn';
   if (updateInfo) {
     if (!updateInfo.ok) {
-      statusText = updateInfo.status === 404 ? '릴리즈 없음' : '확인 실패';
+      statusText = updateInfo.status === 404 ? t.updateReleaseMissing : t.updateCheckFailed;
       stateTone = 'warn';
     } else if (updateInfo.hasUpdate) {
-      statusText = `새 버전 ${updateInfo.latestVersion}`;
+      statusText = t.updateAvailable(updateInfo.latestVersion);
       stateTone = 'ok';
     } else {
-      statusText = '최신 버전';
+      statusText = t.updateCurrent;
       stateTone = 'ok';
     }
   }
 
   return (
-    <Panel icon={RefreshCw} title="업데이트" subtitle="새 버전이 있으면 다운로드 페이지를 엽니다. 자동으로 덮어쓰지는 않습니다.">
+    <Panel icon={RefreshCw} title={t.updateTitle} subtitle={t.updateSubtitle}>
       <div className="settings-grid">
         <div className="setting-row">
           <div className="setting-copy">
-            <span>현재 버전</span>
+            <span>{t.currentVersion}</span>
             <small>{releaseHint}</small>
           </div>
           <strong>{displayVersion}</strong>
@@ -343,10 +343,10 @@ function UpdatePanel({ onToast }) {
       <div className="connection-actions">
         <div className={`connection-state ${stateTone}`}>{statusText}</div>
         <button className="ghost small" disabled={busy} onClick={check}>
-          <RefreshCw size={15} /> 최신 버전 확인
+          <RefreshCw size={15} /> {t.checkLatestVersion}
         </button>
         <button className="gw-toggle start" disabled={busy} onClick={openReleasePage}>
-          <ExternalLink size={15} /> 새 버전 다운로드
+          <ExternalLink size={15} /> {t.downloadNewVersion}
         </button>
       </div>
     </Panel>
@@ -360,17 +360,17 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
     <div className="settings-stack">
       <BasicSettingsPanel settings={settings} settingsBusy={settingsBusy} t={t} onUpdate={onUpdate} />
 
-      <UpdatePanel onToast={onToast} />
+      <UpdatePanel t={t} onToast={onToast} />
 
       <section className="actions settings-details-actions">
         <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={settingsBusy} onClick={() => setDetailsOpen((v) => !v)}>
-          <ChevronDown size={18} /> {detailsOpen ? '접기' : '자세히 보기'}
+          <ChevronDown size={18} /> {detailsOpen ? t.detailsClose : t.detailsOpen}
         </button>
       </section>
 
       {detailsOpen ? (
-        <section className="status-details" aria-label="상세 설정">
-          <ConnectionPanel settings={settings} settingsBusy={settingsBusy} onUpdate={onUpdate} onToast={onToast} />
+        <section className="status-details" aria-label={t.detailsSettingsLabel}>
+          <ConnectionPanel settings={settings} settingsBusy={settingsBusy} t={t} onUpdate={onUpdate} onToast={onToast} />
 
           <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
             <div className="settings-grid">
@@ -419,18 +419,18 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
             </div>
           </Panel>
 
-          <Panel icon={LifeBuoy} title="게이트웨이 자동 복구" subtitle="크래시 감지는 항상 켜져 있고, 자동 재시작만 선택입니다.">
+          <Panel icon={LifeBuoy} title={t.gatewayRecoveryTitle} subtitle={t.gatewayRecoverySubtitle}>
             <div className="settings-grid">
-              <SettingRow title="크래시 시 자동 재시작" hint="실행 중이던 게이트웨이가 멈추면 자동으로 다시 시작합니다. (Hermes 자체 복구와 겹칠 수 있어 기본 꺼짐)">
+              <SettingRow title={t.crashAutoRestart} hint={t.crashAutoRestartHint}>
                 <ToggleSwitch
                   checked={settings.autoRestartEnabled}
                   disabled={settingsBusy}
-                  label="자동 재시작"
+                  label={t.autoRestart}
                   onChange={(v) => onUpdate({ autoRestartEnabled: v })}
                 />
               </SettingRow>
 
-              <SettingRow title="최대 재시도 횟수" hint="10분 안에 이 횟수만큼 재시도한 뒤 멈춥니다. 무한 루프 방지.">
+              <SettingRow title={t.maxRetries} hint={t.maxRetriesHint}>
                 <DebouncedSlider
                   icon={RotateCcw}
                   min={1}
@@ -438,14 +438,14 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
                   step={1}
                   value={settings.autoRestartMax}
                   disabled={!settings.autoRestartEnabled}
-                  unit="회"
+                  unit={t.attemptsUnit}
                   onCommit={(v) => onUpdate({ autoRestartMax: v })}
                 />
               </SettingRow>
             </div>
           </Panel>
 
-          <WslMemoryPanel onToast={onToast} />
+          <WslMemoryPanel t={t} onToast={onToast} />
 
           <LogTab t={t} />
         </section>

@@ -131,7 +131,7 @@ function HistoryList({ history, t }) {
         {history.slice(0, 8).map((h, i) => {
           const enter = h.event === 'enter';
           const label = enter
-            ? `${t.serverMode} · ${h.trigger === 'manual' ? '수동/manual' : 'auto'}`
+            ? `${t.serverMode} · ${h.trigger === 'manual' ? t.historyManual : t.historyAuto}`
             : `${t.userMode} · ${h.reason === 'input-detected' ? t.exitServerMode : h.reason || ''}`;
           return (
             <li key={i} className={enter ? 'enter' : 'exit'}>
@@ -225,19 +225,19 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
       <section className="grid status-summary-grid">
         <StatCard
           icon={RadioTower}
-          label="실행 중 게이트웨이"
+          label={t.statusRunningGateways}
           value={summary ? `${summary.running} / ${summary.total}` : '…'}
           tone={summary && summary.running > 0 ? 'ok' : 'off'}
         />
         <StatCard
           icon={Send}
-          label="연결된 플랫폼"
+          label={t.statusConnectedPlatforms}
           value={summary ? `${summary.connected}` : '…'}
           tone={summary && summary.connected > 0 ? 'ok' : 'neutral'}
         />
         <StatCard
           icon={AlertTriangle}
-          label="중단 감지"
+          label={t.statusInterruptions}
           value={summary ? `${summary.crashed}` : '…'}
           tone={summary && summary.crashed > 0 ? 'warn' : 'neutral'}
         />
@@ -255,8 +255,8 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
             <Power size={18} /> {t.start}
           </button>
         )}
-        <button className="danger-hard" disabled={busy || !status.wslRunning} onClick={onShutdownWsl} title="WSL2 백엔드 VM 전체를 종료하고 메모리를 해제합니다">
-          <PowerOff size={18} /> WSL 종료
+        <button className="danger-hard" disabled={busy || !status.wslRunning} onClick={onShutdownWsl} title={t.shutdownWslHint}>
+          <PowerOff size={18} /> {t.shutdownWsl}
         </button>
         <button className="ghost" disabled={busy || !status.dashboardOnline} onClick={() => window.hermes.openDashboard()}>
           <ExternalLink size={18} /> {t.dashboard}
@@ -265,7 +265,7 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
           <FolderOpen size={18} /> {t.labFolder}
         </button>
         <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={busy} onClick={() => setDetailsOpen((v) => !v)}>
-          <ChevronDown size={18} /> {detailsOpen ? '접기' : '자세히 보기'}
+          <ChevronDown size={18} /> {detailsOpen ? t.detailsClose : t.detailsOpen}
         </button>
         <button className="icon-button" disabled={busy} onClick={onRefresh} title={t.refresh} aria-label={t.refresh}>
           <RefreshCw size={18} />
@@ -273,7 +273,7 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
       </section>
 
       {detailsOpen ? (
-        <section className="status-details" aria-label="상세 상태">
+        <section className="status-details" aria-label={t.statusDetailsLabel}>
           <section className="grid sub-grid">
             <StatCard icon={Server} label={t.wslUbuntu} value={status.wslRunning ? t.running : t.stopped} tone={status.wslRunning ? 'ok' : 'off'} />
             <StatCard icon={Activity} label={t.dashboard} value={status.dashboardOnline ? t.online : t.offline} tone={status.dashboardOnline ? 'ok' : 'off'} />

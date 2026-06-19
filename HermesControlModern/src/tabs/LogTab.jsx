@@ -47,11 +47,11 @@ export default function LogTab({ t }) {
   const action = (
     <div className="panel-actions">
       <label className="mini-toggle">
-        <ToggleSwitch checked={follow} onChange={setFollow} label="따라가기" />
-        <span>따라가기</span>
+        <ToggleSwitch checked={follow} onChange={setFollow} label={t.logFollow} />
+        <span>{t.logFollow}</span>
       </label>
-      <button className="ghost small" onClick={() => setLines([])} title="지우기">
-        <Trash2 size={15} /> 지우기
+      <button className="ghost small" onClick={() => setLines([])} title={t.logClear}>
+        <Trash2 size={15} /> {t.logClear}
       </button>
     </div>
   );
@@ -59,21 +59,21 @@ export default function LogTab({ t }) {
   return (
     <Panel
       icon={FileText}
-      title="전체 로그"
-      subtitle="모든 프로필 gateway.log / gateway.controller.log 원문 스트림"
+      title={t.allLogsTitle}
+      subtitle={t.allLogsSubtitle}
       action={action}
     >
       <div className="log-view" ref={scrollRef}>
         {lines.length === 0 ? (
           <div className="log-empty">
-            {streaming ? <><Pause size={14} className="spin" /> 전체 로그를 기다리는 중…</> : <>표시할 로그가 없습니다.</>}
+            {streaming ? <><Pause size={14} className="spin" /> {t.waitingAllLogs}</> : <>{t.noLogs}</>}
           </div>
         ) : (
           lines.map((l) => <div key={l.id} className={`log-line ${lineTone(l.text)}`}>{l.text || ' '}</div>)
         )}
       </div>
       <div className="log-foot">
-        <span><ArrowDownToLine size={13} /> {lines.length} 줄{lines.length >= MAX_LINES ? ` (최근 ${MAX_LINES}줄만 유지)` : ''}</span>
+        <span><ArrowDownToLine size={13} /> {t.logLineCount(lines.length)}{lines.length >= MAX_LINES ? t.recentLinesOnly(MAX_LINES) : ''}</span>
       </div>
     </Panel>
   );

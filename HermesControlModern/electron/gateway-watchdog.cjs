@@ -24,6 +24,7 @@ function createGatewayWatchdog(deps) {
     onEvent, // ({ type, name, ... }) => void
     onProfiles, // ({ profiles, at }) => void
     notify, // ({ title, body }) => void
+    getText, // () => native notification strings
     pollMs = DEFAULT_POLL_MS
   } = deps;
 
@@ -33,6 +34,18 @@ function createGatewayWatchdog(deps) {
   const desired = new Set();
   const suppress = new Map(); // name -> untilTs
   const retries = new Map(); // name -> { count, windowStart }
+
+  function text() {
+    const fallback = {
+      crashTitle: 'Gateway interruption detected',
+      crashBody: (name) => `${name} gateway stopped unexpectedly.`,
+      restartStoppedTitle: 'Auto restart stopped',
+      restartStoppedBody: (name, max) => `${name}: exceeded max retries (${max}).`,
+      autoRestartTitle: 'Gateway auto restart',
+      autoRestartBody: (name, count, max) => `${name} (attempt ${count}/${max})`
+    };
+    return { ...fallback, ...(typeof getText === 'function' ? getText() : {}) };
+  }
 
   function isSuppressed(name, nowTs) {
     const until = suppress.get(name);
@@ -77,7 +90,7 @@ function createGatewayWatchdog(deps) {
   async function handleCrash(name) {
     if (typeof onEvent === 'function') onEvent({ type: 'crash', name, at: Date.now() });
     if (typeof notify === 'function') {
-      notify({ title: '게이트웨이 중단 감지', body: `${name} 게이트웨이가 예기치 않게 종료됐습니다.` });
+      notify({ title: text().crashTitle, body: text().crashBody(name) });
     }
 
     const cfg = getConfig() || {};
@@ -91,7 +104,7 @@ function createGatewayWatchdog(deps) {
     if (r.count >= max) {
       retries.set(name, r);
       if (typeof onEvent === 'function') onEvent({ type: 'restart-failed', name, reason: 'max-retries' });
-      if (typeof notify === 'function') notify({ title: '자동 재시작 중단', body: `${name}: 최대 재시도(${max})를 초과했습니다.` });
+      if (typeof notify === 'function') notify({ title: text().restartStoppedTitle, body: text().restartStoppedBody(name, max) });
       return;
     }
 
@@ -102,7 +115,7 @@ function createGatewayWatchdog(deps) {
       const result = await startProfile(name);
       if (result && result.ok !== false) {
         if (typeof onEvent === 'function') onEvent({ type: 'restarted', name, attempt: r.count, max });
-        if (typeof notify === 'function') notify({ title: '게이트웨이 자동 재시작', body: `${name} (시도 ${r.count}/${max})` });
+        if (typeof notify === 'function') notify({ title: text().autoRestartTitle, body: text().autoRestartBody(name, r.count, max) });
       } else {
         if (typeof onEvent === 'function') onEvent({ type: 'restart-failed', name, reason: (result && result.output) || 'start failed' });
       }

@@ -27,7 +27,7 @@ function createHermesAdapter(runWsl, config) {
   ];
 
   const REASONING_OPTIONS = [
-    { id: '', label: '기본값' },
+    { id: '', label: 'Default' },
     { id: 'minimal', label: 'minimal' },
     { id: 'low', label: 'low' },
     { id: 'medium', label: 'medium' },
@@ -44,6 +44,13 @@ function createHermesAdapter(runWsl, config) {
 
   function shellQuote(value) {
     return `'${String(value).replace(/'/g, "'\\''")}'`;
+  }
+
+  // Profile names get interpolated into shell commands and tmux session names.
+  // Restrict to a safe charset so no name can break out of the surrounding
+  // command. Single source of truth for every name-taking method below.
+  function isValidProfileName(name) {
+    return typeof name === 'string' && /^[A-Za-z0-9_-]+$/.test(name);
   }
 
   // wsl.exe (via execFile) strips `$var`/`$(...)` from the inline command
@@ -71,7 +78,8 @@ function createHermesAdapter(runWsl, config) {
   // Dump every profile's gateway_state.json in one shot, framed by @@@<name>.
   function dumpStatesCommand() {
     return (
-      `for f in ${home}/profiles/*/gateway_state.json; do ` +
+      `h=${shellQuote(home)}; ` +
+      `for f in "$h"/profiles/*/gateway_state.json; do ` +
       `[ -e "$f" ] || continue; ` +
       `n=$(basename "$(dirname "$f")"); ` +
       `echo "@@@$n"; cat "$f"; echo; ` +
@@ -109,7 +117,7 @@ function createHermesAdapter(runWsl, config) {
   }
 
   function dumpProfileConfigsCommand() {
-    return `HERMES_HOME=${home} python3 - <<'PY'
+    return `HERMES_HOME=${shellQuote(home)} python3 - <<'PY'
 import json, os
 from pathlib import Path
 try:
@@ -117,7 +125,7 @@ try:
 except Exception:
     yaml = None
 
-base = Path(os.path.expandvars('${home}')).expanduser() / 'profiles'
+base = Path(os.environ.get('HERMES_HOME', '')).expanduser() / 'profiles'
 out = {}
 if base.exists() and yaml is not None:
     for profile_dir in sorted(p for p in base.iterdir() if p.is_dir()):
@@ -207,7 +215,7 @@ PY`;
 
   async function setProfileModelSettings(name, patch = {}) {
     if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
-    if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) {
+    if (!isValidProfileName(name)) {
       return { ok: false, error: 'invalid profile name' };
     }
 
@@ -230,9 +238,10 @@ PY`;
 
     const script = [
       'set -euo pipefail',
-      `backup_dir="${home}/backups/controller-profile-models/$(date +%Y%m%d-%H%M%S)-${name}"`,
+      `h=${shellQuote(home)}`,
+      `backup_dir="$h/backups/controller-profile-models/$(date +%Y%m%d-%H%M%S)-${name}"`,
       'mkdir -p "$backup_dir"',
-      `cp -a ${shellQuote(`${home}/profiles/${name}/config.yaml`)} "$backup_dir/config.yaml"`,
+      `cp -a "$h/profiles/${name}/config.yaml" "$backup_dir/config.yaml"`,
       ...commands,
       `hermes --profile ${shellQuote(name)} config check >/dev/null`,
       'echo "$backup_dir"'
@@ -248,12 +257,12 @@ PY`;
 
   async function listProfileBackups(name) {
     if (!configured) return { ok: false, backups: [], error: 'Hermes connection is not configured.' };
-    if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, backups: [], error: 'invalid profile name' };
-    const script = `python3 - <<'PY'
+    if (!isValidProfileName(name)) return { ok: false, backups: [], error: 'invalid profile name' };
+    const script = `HERMES_HOME=${shellQuote(home)} python3 - <<'PY'
 import json, os, re
 from pathlib import Path
 name = ${JSON.stringify(name)}
-base = Path(os.path.expandvars('${home}')).expanduser() / 'backups' / 'controller-profile-models'
+base = Path(os.environ.get('HERMES_HOME', '')).expanduser() / 'backups' / 'controller-profile-models'
 items = []
 if base.exists():
     for d in base.iterdir():
@@ -274,14 +283,15 @@ PY`;
 
   async function restoreProfileBackup(name, backupId) {
     if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
-    if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: 'invalid profile name' };
+    if (!isValidProfileName(name)) return { ok: false, error: 'invalid profile name' };
     if (!backupId || !/^[A-Za-z0-9_-]+$/.test(backupId) || !backupId.endsWith(`-${name}`)) return { ok: false, error: 'invalid backup id' };
     const script = [
       'set -euo pipefail',
       `backup=${shellQuote(`${home}/backups/controller-profile-models/${backupId}/config.yaml`)}`,
       `target=${shellQuote(`${home}/profiles/${name}/config.yaml`)}`,
       'test -f "$backup"',
-      `rollback_dir="${home}/backups/controller-profile-restore/$(date +%Y%m%d-%H%M%S)-${name}"`,
+      `h=${shellQuote(home)}`,
+      `rollback_dir="$h/backups/controller-profile-restore/$(date +%Y%m%d-%H%M%S)-${name}"`,
       'mkdir -p "$rollback_dir"',
       'cp -a "$target" "$rollback_dir/config.yaml"',
       'cp -a "$backup" "$target"',
@@ -294,12 +304,12 @@ PY`;
 
   async function profileLogSummary(name) {
     if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
-    if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: 'invalid profile name' };
-    const script = `python3 - <<'PY'
+    if (!isValidProfileName(name)) return { ok: false, error: 'invalid profile name' };
+    const script = `HERMES_HOME=${shellQuote(home)} python3 - <<'PY'
 import json, os, re
 from pathlib import Path
 name = ${JSON.stringify(name)}
-base = Path(os.path.expandvars('${home}')).expanduser() / 'profiles' / name / 'logs'
+base = Path(os.environ.get('HERMES_HOME', '')).expanduser() / 'profiles' / name / 'logs'
 paths = [base / 'gateway.log', base / 'gateway.controller.log']
 lines = []
 source = ''
@@ -335,6 +345,7 @@ PY`;
   // Set the sticky default profile. Safe, idempotent.
   async function useProfile(name) {
     if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
+    if (!isValidProfileName(name)) return { ok: false, output: 'invalid profile name' };
     const result = await hermes(`profile use ${shellQuote(name)}`, 12000);
     return { ok: result.ok, output: (result.stdout || result.stderr || '').trim() };
   }
@@ -349,15 +360,17 @@ PY`;
   // itself when the gateway stops, so no session leaks.
   async function gatewayStartProfile(name) {
     if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
+    if (!isValidProfileName(name)) return { ok: false, output: 'invalid profile name' };
     const session = `gw-${name}`;
     const logDir = `${home}/profiles/${name}/logs`;
     const logFile = `${logDir}/gateway.controller.log`;
-    const inner =
-      `cd ${config.labRoot} && HERMES_HOME=${home} ` +
-      `hermes --profile ${name} gateway run --replace >> ${logFile} 2>&1`;
+    const inner = [
+      `cd ${shellQuote(config.labRoot)}`,
+      `HERMES_HOME=${shellQuote(home)} hermes --profile ${shellQuote(name)} gateway run --replace >> ${shellQuote(logFile)} 2>&1`
+    ].join(' && ');
     const cmd =
       `mkdir -p ${shellQuote(logDir)}; ` +
-      `tmux kill-session -t ${shellQuote(session)} 2>/dev/null; ` +
+      `tmux kill-session -t ${shellQuote(session)} 2>/dev/null || true; ` +
       `tmux new-session -d -s ${shellQuote(session)} ${shellQuote(inner)}; ` +
       `echo started`;
     const result = await runWsl(cmd, 15000);
@@ -367,6 +380,7 @@ PY`;
   // Stop a specific profile's gateway via its pidfile.
   async function gatewayStopProfile(name) {
     if (!configured) return { ok: false, output: 'Hermes connection is not configured.' };
+    if (!isValidProfileName(name)) return { ok: false, output: 'invalid profile name' };
     const result = await hermes(`--profile ${shellQuote(name)} gateway stop`, 20000);
     return { ok: result.ok, output: (result.stdout || result.stderr || '').trim() };
   }

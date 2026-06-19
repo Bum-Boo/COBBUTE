@@ -71,6 +71,9 @@ function App() {
   const toastId = useRef(0);
 
   const t = useMemo(() => makeStrings(settings.language), [settings.language]);
+  const tRef = useRef(t);
+
+  useEffect(() => { tRef.current = t; }, [t]);
 
   useEffect(() => {
     applyThemePreference(settings.theme);
@@ -170,16 +173,17 @@ function App() {
     const unsubscribeGw = window.hermes.onGatewayEvent((e) => {
       if (!e || !e.name) return;
       const label = nameOf(e.name);
+      const text = tRef.current;
       if (e.type === 'crash') {
         setCrashed((prev) => new Set(prev).add(e.name));
-        pushToast(`${label} 게이트웨이가 중단됐어요`, 'warn', 7000);
+        pushToast(text.gatewayCrashedToast(label), 'warn', 7000);
       } else if (e.type === 'restarting') {
-        pushToast(`${label} 자동 재시작 중… (${e.attempt}/${e.max})`, 'busy', 4000);
+        pushToast(text.gatewayRestartingToast(label, e.attempt, e.max), 'busy', 4000);
       } else if (e.type === 'restarted') {
         setCrashed((prev) => { const n = new Set(prev); n.delete(e.name); return n; });
-        pushToast(`${label} 자동 재시작 완료`, 'ok');
+        pushToast(text.gatewayRestartedToast(label), 'ok');
       } else if (e.type === 'restart-failed') {
-        pushToast(`${label} 자동 재시작 실패`, 'err', 7000);
+        pushToast(text.gatewayRestartFailedToast(label), 'err', 7000);
       }
     });
 
@@ -221,7 +225,7 @@ function App() {
         setStatus(res.status);
         setMessageKey(messageKeyForStatus(res.status));
       }
-      pushToast('WSL을 완전히 종료했습니다', 'ok');
+      pushToast(t.wslShutdownDoneToast, 'ok');
     } finally {
       setBusy(false);
     }
@@ -261,12 +265,12 @@ function App() {
     try {
       if (p.running) {
         await window.hermes.gatewayStop(p.name);
-        pushToast(`${label} 게이트웨이 정지`, 'info');
+        pushToast(t.gatewayStoppedToast(label), 'info');
       } else {
         // Clear any prior crash flag — the user is deliberately (re)starting it.
         setCrashed((prev) => { const n = new Set(prev); n.delete(p.name); return n; });
         await window.hermes.gatewayStart(p.name);
-        pushToast(`${label} 게이트웨이 시작`, 'ok');
+        pushToast(t.gatewayStartedToast(label), 'ok');
       }
       await loadProfiles(false);
       setTimeout(() => loadProfiles(false), 2500);
@@ -279,7 +283,7 @@ function App() {
     setBusyName(name);
     try {
       await window.hermes.useProfile(name);
-      pushToast(`${nameOf(name)} 기본 프로필로 설정`, 'ok');
+      pushToast(t.defaultProfileSetToast(nameOf(name)), 'ok');
       await loadProfiles(false);
     } finally { setBusyName(''); }
   };
@@ -291,12 +295,12 @@ function App() {
       await window.hermes.gatewayStop(p.name);
       setCrashed((prev) => { const n = new Set(prev); n.delete(p.name); return n; });
       await window.hermes.gatewayStart(p.name);
-      pushToast(`${label} 게이트웨이 재시작`, 'ok');
+      pushToast(t.gatewayRestartedManualToast(label), 'ok');
       await loadProfiles(false);
       setTimeout(() => loadProfiles(false), 2500);
       return { ok: true };
     } catch (error) {
-      pushToast(`${label} 게이트웨이 재시작 실패`, 'err', 7000);
+      pushToast(t.gatewayRestartFailedManualToast(label), 'err', 7000);
       return { ok: false, error };
     } finally {
       setBusyName('');
@@ -313,12 +317,12 @@ function App() {
     try {
       const result = await window.hermes.setProfileModelSettings(name, patch);
       if (!result || !result.ok) {
-        pushToast(`${nameOf(name)} 설정 변경 실패`, 'err', 7000);
+        pushToast(t.profileSettingsFailedToast(nameOf(name)), 'err', 7000);
         return { ok: false, result };
       }
-      const changed = Object.prototype.hasOwnProperty.call(patch, 'model') ? '모델' : '추론 정도';
+      const changed = Object.prototype.hasOwnProperty.call(patch, 'model') ? t.modelChanged : t.reasoningChanged;
       const isRunning = profiles.some((p) => p.name === name && p.running);
-      pushToast(`${nameOf(name)} ${changed} 저장 완료${isRunning ? ' · 재시작하면 확실히 반영' : ''}`, 'ok', 6500);
+      pushToast(t.profileSettingSavedToast(nameOf(name), changed, isRunning), 'ok', 6500);
       await loadProfiles(false);
       return { ok: true, result, requiresRestart: isRunning, changed };
     } finally { setBusyName(''); }
@@ -329,11 +333,11 @@ function App() {
     try {
       const result = await window.hermes.restoreProfileBackup(name, backupId);
       if (!result || !result.ok) {
-        pushToast(`${nameOf(name)} 백업 복원 실패`, 'err', 7000);
+        pushToast(t.backupRestoreFailedToast(nameOf(name)), 'err', 7000);
         return { ok: false, result };
       }
       const isRunning = profiles.some((p) => p.name === name && p.running);
-      pushToast(`${nameOf(name)} 백업 복원 완료${isRunning ? ' · 재시작하면 확실히 반영' : ''}`, 'ok', 6500);
+      pushToast(t.backupRestoreDoneToast(nameOf(name), isRunning), 'ok', 6500);
       await loadProfiles(false);
       return { ok: true, result, requiresRestart: isRunning };
     } finally { setBusyName(''); }
@@ -416,7 +420,7 @@ function App() {
         <span>{t.lastChecked} {formatTime(status.checkedAt)}</span>
       </footer>
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} t={t} />
     </main>
   );
 }
