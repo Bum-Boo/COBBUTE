@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('hermes', {
   stop: () => ipcRenderer.invoke('hermes:stop'),
   shutdownWsl: () => ipcRenderer.invoke('hermes:shutdownWsl'),
   openDashboard: () => ipcRenderer.invoke('hermes:openDashboard'),
+  openFrameworkDashboard: (id) => ipcRenderer.invoke('hermes:openFrameworkDashboard', id),
   openLabFolder: () => ipcRenderer.invoke('hermes:openLabFolder'),
   getAppInfo: () => ipcRenderer.invoke('hermes:getAppInfo'),
   checkForUpdates: () => ipcRenderer.invoke('hermes:checkForUpdates'),
@@ -25,6 +26,8 @@ contextBridge.exposeInMainWorld('hermes', {
   // Profiles (with per-profile gateway control)
   getProfiles: () => ipcRenderer.invoke('hermes:getProfiles'),
   getFrameworks: () => ipcRenderer.invoke('hermes:getFrameworks'),
+  frameworkStart: (id) => ipcRenderer.invoke('hermes:frameworkStart', id),
+  frameworkStop: (id) => ipcRenderer.invoke('hermes:frameworkStop', id),
   getModelOptions: () => ipcRenderer.invoke('hermes:getModelOptions'),
   setProfileModelSettings: (name, patch) => ipcRenderer.invoke('hermes:setProfileModelSettings', name, patch),
   getProfileOpsState: () => ipcRenderer.invoke('hermes:getProfileOpsState'),

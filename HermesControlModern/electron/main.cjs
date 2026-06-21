@@ -72,6 +72,7 @@ const STARTUP_SHORTCUT_NAME = 'Hermes Lab Controller.lnk';
 const RELEASE_REPO = process.env.HERMES_CONTROLLER_RELEASE_REPO || 'Bum-Boo/COBBUTE';
 const RELEASES_URL = `https://github.com/${RELEASE_REPO}/releases`;
 const LATEST_RELEASE_URL = `${RELEASES_URL}/latest`;
+const OPENCLAW_DASHBOARD_URL = process.env.OPENCLAW_DASHBOARD_URL || 'http://127.0.0.1:18789/';
 
 let mainWindow = null;
 let tray = null;
@@ -722,6 +723,19 @@ async function listProfilesIfWslRunning() {
   return adapter.listProfiles();
 }
 
+function openClawFrameworkWhenWslOff() {
+  return {
+    id: 'openclaw',
+    name: 'OpenClaw',
+    kind: 'framework',
+    installed: Boolean(openclawAdapter),
+    gateway: { service: 'openclaw-gateway.service', state: 'WSL off', running: false, port: 18789 },
+    dashboardUrl: OPENCLAW_DASHBOARD_URL,
+    agents: [],
+    warnings: ['wsl-off']
+  };
+}
+
 async function listFrameworksIfWslRunning() {
   const wslRunning = currentStatus ? currentStatus.wslRunning : await isWslRunning();
   const hermesFramework = {
@@ -734,7 +748,7 @@ async function listFrameworksIfWslRunning() {
     warnings: isConnectionConfigured() ? [] : ['not-configured']
   };
   if (!wslRunning) {
-    return { ok: true, skipped: 'wsl-off', frameworks: [hermesFramework] };
+    return { ok: true, skipped: 'wsl-off', frameworks: [hermesFramework, openClawFrameworkWhenWslOff()] };
   }
   const openclaw = openclawAdapter ? await openclawAdapter.getStatus() : { ok: false, framework: { id: 'openclaw', name: 'OpenClaw', installed: false, gateway: { state: 'unknown', running: false }, agents: [], warnings: ['adapter-not-ready'] } };
   return { ok: true, frameworks: [hermesFramework, openclaw.framework] };
@@ -752,13 +766,40 @@ async function startHermes() {
 
 async function stopHermes() {
   if (!isConnectionConfigured()) return publishStatus({ notify: false });
-  await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000);
+  await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
   await runWsl(`systemctl --user stop hermes-dashboard.service >/dev/null 2>&1 || true; HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || systemctl --user stop hermes-gateway.service >/dev/null 2>&1 || true`, 15000);
-  await run(wslPath(), ['--terminate', CONFIG.distro], 15000);
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
   const status = await publishStatus({ notify: true });
-  new Notification({ title: 'AI Framework Controller', body: 'Hermes and WSL Ubuntu were stopped.' }).show();
+  new Notification({ title: 'AI Framework Controller', body: 'Hermes services were stopped.' }).show();
   return status;
+}
+
+async function startOpenClaw() {
+  const result = await runWsl('systemctl --user start openclaw-gateway.service', 18000);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const status = await publishStatus({ notify: true });
+  if (!result.ok) return { ok: false, status, error: result.stderr || result.error || 'OpenClaw start failed' };
+  return { ok: true, status };
+}
+
+async function stopOpenClaw() {
+  const result = await runWsl('systemctl --user stop openclaw-gateway.service', 15000);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const status = await publishStatus({ notify: true });
+  if (!result.ok) return { ok: false, status, error: result.stderr || result.error || 'OpenClaw stop failed' };
+  return { ok: true, status };
+}
+
+async function startFramework(id) {
+  if (id === 'hermes') return { ok: true, status: await startHermes() };
+  if (id === 'openclaw') return startOpenClaw();
+  return { ok: false, error: 'unknown framework' };
+}
+
+async function stopFramework(id) {
+  if (id === 'hermes') return { ok: true, status: await stopHermes() };
+  if (id === 'openclaw') return stopOpenClaw();
+  return { ok: false, error: 'unknown framework' };
 }
 
 // Full WSL shutdown: `wsl --shutdown` stops the entire WSL2 backend VM (every
@@ -924,6 +965,19 @@ function invalidProfileResult(extra = {}) {
   return { ok: false, error: 'invalid profile name', ...extra };
 }
 
+function dashboardUrlForFramework(id) {
+  if (id === 'hermes') return CONFIG.dashboardUrl;
+  if (id === 'openclaw') return OPENCLAW_DASHBOARD_URL;
+  return '';
+}
+
+function openFrameworkDashboard(id) {
+  const url = dashboardUrlForFramework(id);
+  if (!url) return { ok: false, error: 'unknown framework dashboard' };
+  shell.openExternal(url);
+  return { ok: true, url };
+}
+
 ipcMain.handle('hermes:getStatus', () => publishStatus());
 ipcMain.handle('hermes:start', () => startHermes());
 ipcMain.handle('hermes:stop', () => stopHermes());
@@ -945,7 +999,8 @@ ipcMain.handle('hermes:shutdownWsl', async () => {
   const status = await shutdownWsl();
   return { cancelled: false, status };
 });
-ipcMain.handle('hermes:openDashboard', () => shell.openExternal(CONFIG.dashboardUrl));
+ipcMain.handle('hermes:openDashboard', () => openFrameworkDashboard('hermes'));
+ipcMain.handle('hermes:openFrameworkDashboard', (_event, id) => openFrameworkDashboard(id));
 ipcMain.handle('hermes:openLabFolder', () => {
   if (!CONFIG.labUnc) return { ok: false, error: 'Lab folder path is not configured.' };
   return shell.openPath(CONFIG.labUnc);
@@ -963,6 +1018,8 @@ ipcMain.handle('hermes:getModeHistory', () => (modeManager ? modeManager.getHist
 
 ipcMain.handle('hermes:getProfiles', () => listProfilesIfWslRunning());
 ipcMain.handle('hermes:getFrameworks', () => listFrameworksIfWslRunning());
+ipcMain.handle('hermes:frameworkStart', (_event, id) => startFramework(id));
+ipcMain.handle('hermes:frameworkStop', (_event, id) => stopFramework(id));
 ipcMain.handle('hermes:getModelOptions', () => (adapter ? adapter.modelOptions() : { ok: false, models: [], reasoning: [] }));
 ipcMain.handle('hermes:setProfileModelSettings', (_event, name, patch) => {
   if (!isValidProfileName(name)) return invalidProfileResult();

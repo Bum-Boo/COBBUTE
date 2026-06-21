@@ -200,18 +200,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const runAction = async (action) => {
-    setBusy(true);
-    setMessageKey(action === 'start' ? 'starting' : 'stopping');
-    try {
-      const next = action === 'start' ? await window.hermes.start() : await window.hermes.stop();
-      setStatus(next);
-      setMessageKey(next.ready ? 'readyMessage' : action === 'stop' ? 'stoppedClean' : 'startSent');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const shutdownWsl = async () => {
     setBusy(true);
     setMessageKey('stopping');
@@ -346,6 +334,35 @@ function App() {
   const loadProfileBackups = async (name) => window.hermes.getProfileBackups(name);
   const loadProfileLogSummary = async (name) => window.hermes.getProfileLogSummary(name);
 
+  const openFrameworkDashboard = useCallback(async (id) => {
+    const result = await window.hermes.openFrameworkDashboard(id);
+    if (result && result.ok === false) pushToast(result.error || 'Dashboard open failed', 'err', 5000);
+    return result;
+  }, [pushToast]);
+
+  const toggleFramework = useCallback(async (framework) => {
+    const id = framework?.id;
+    if (!id) return { ok: false };
+    const running = Boolean(framework?.gateway?.running);
+    setBusy(true);
+    try {
+      const result = running
+        ? await window.hermes.frameworkStop(id)
+        : await window.hermes.frameworkStart(id);
+      if (result && result.status) setStatus(result.status);
+      if (result && result.ok === false) {
+        pushToast(result.error || `${framework.name || id} action failed`, 'err', 6000);
+      } else {
+        pushToast(`${framework.name || id} ${running ? (t.frameworkStop || t.stop) : (t.frameworkStart || t.start)}`, running ? 'info' : 'ok', 3500);
+      }
+      await refresh();
+      setTimeout(refresh, 2200);
+      return result;
+    } finally {
+      setBusy(false);
+    }
+  }, [pushToast, refresh, t.frameworkStart, t.frameworkStop, t.start, t.stop]);
+
   const profileSummary = useMemo(() => {
     const running = profiles.filter((p) => p.running);
     const platformsConnected = profiles.reduce((acc, p) => {
@@ -381,11 +398,12 @@ function App() {
           t={t}
           busy={busy}
           messageKey={messageKey}
-          onAction={runAction}
           onRefresh={refresh}
           onShutdownWsl={shutdownWsl}
           onEnterServer={enterServer}
           onExitServer={exitServer}
+          onOpenFrameworkDashboard={openFrameworkDashboard}
+          onToggleFramework={toggleFramework}
         />
       )}
       {tab === 'profiles' && (

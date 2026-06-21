@@ -146,7 +146,7 @@ function HistoryList({ history, t }) {
   );
 }
 
-function FrameworkCards({ frameworks, t }) {
+function FrameworkCards({ frameworks, t, busy, onOpenDashboard, onToggleFramework }) {
   if (!frameworks || frameworks.length === 0) return null;
   const textForGateway = (framework) => {
     const gateway = framework.gateway || {};
@@ -162,6 +162,11 @@ function FrameworkCards({ frameworks, t }) {
         const agentCount = Array.isArray(fw.agents) ? fw.agents.length : null;
         const warningCount = Array.isArray(fw.warnings) ? fw.warnings.length : 0;
         const tone = !fw.installed ? 'off' : (fw.gateway && fw.gateway.running) ? 'ok' : warningCount > 0 ? 'warn' : 'neutral';
+        const running = Boolean(fw.gateway && fw.gateway.running);
+        const canToggle = Boolean(fw.id && onToggleFramework);
+        const canOpenDashboard = Boolean(fw.installed && fw.dashboardUrl && onOpenDashboard);
+        const startLabel = t.frameworkStart || t.start;
+        const stopLabel = t.frameworkStop || t.stop;
         return (
           <div key={fw.id || fw.name} className={`framework-card ${tone}`}>
             <div className="framework-main">
@@ -175,7 +180,27 @@ function FrameworkCards({ frameworks, t }) {
                 </div>
               </div>
             </div>
-            {warningCount > 0 ? <span className="framework-warn">{warningCount}</span> : null}
+            <div className="framework-actions">
+              {warningCount > 0 ? <span className="framework-warn">{warningCount}</span> : null}
+              <button
+                type="button"
+                className={`framework-toggle ${running ? 'stop' : 'start'}`}
+                disabled={busy || !canToggle}
+                onClick={() => onToggleFramework(fw)}
+                title={`${fw.name} ${running ? stopLabel : startLabel}`}
+              >
+                {running ? <PowerOff size={14} /> : <Power size={14} />} {running ? stopLabel : startLabel}
+              </button>
+              <button
+                type="button"
+                className="framework-dashboard"
+                disabled={busy || !canOpenDashboard}
+                onClick={() => onOpenDashboard(fw.id)}
+                title={`${fw.name} ${t.dashboard}`}
+              >
+                <ExternalLink size={14} /> {t.dashboard}
+              </button>
+            </div>
           </div>
         );
       })}
@@ -183,7 +208,7 @@ function FrameworkCards({ frameworks, t }) {
   );
 }
 
-export default function StatusTab({ status, mode, history, summary, frameworks, t, busy, messageKey, onAction, onRefresh, onShutdownWsl, onEnterServer, onExitServer }) {
+export default function StatusTab({ status, mode, history, summary, frameworks, t, busy, messageKey, onRefresh, onShutdownWsl, onEnterServer, onExitServer, onOpenFrameworkDashboard, onToggleFramework }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const heroClass = useMemo(() => {
@@ -220,7 +245,7 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
         </div>
       </section>
 
-      <FrameworkCards frameworks={frameworks} t={t} />
+      <FrameworkCards frameworks={frameworks} t={t} busy={busy} onOpenDashboard={onOpenFrameworkDashboard} onToggleFramework={onToggleFramework} />
 
       <section className="grid status-summary-grid">
         <StatCard
@@ -246,23 +271,8 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
       <ModeCard mode={mode} t={t} busy={busy} onEnter={onEnterServer} onExit={onExitServer} />
 
       <section className="actions">
-        {status.wslRunning ? (
-          <button className="danger" disabled={busy} onClick={() => onAction('stop')}>
-            <Power size={18} /> {t.stop}
-          </button>
-        ) : (
-          <button className="primary" disabled={busy} onClick={() => onAction('start')}>
-            <Power size={18} /> {t.start}
-          </button>
-        )}
         <button className="danger-hard" disabled={busy || !status.wslRunning} onClick={onShutdownWsl} title={t.shutdownWslHint}>
           <PowerOff size={18} /> {t.shutdownWsl}
-        </button>
-        <button className="ghost" disabled={busy || !status.dashboardOnline} onClick={() => window.hermes.openDashboard()}>
-          <ExternalLink size={18} /> {t.dashboard}
-        </button>
-        <button className="ghost" disabled={busy} onClick={() => window.hermes.openLabFolder()}>
-          <FolderOpen size={18} /> {t.labFolder}
         </button>
         <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={busy} onClick={() => setDetailsOpen((v) => !v)}>
           <ChevronDown size={18} /> {detailsOpen ? t.detailsClose : t.detailsOpen}
@@ -280,6 +290,11 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
             <StatCard icon={Bell} label={t.gateway} value={serviceLabel(status.gateway, t)} tone={status.gateway === 'active' ? 'ok' : 'neutral'} />
             <StatCard icon={ShieldCheck} label={t.codexOAuth} value={serviceLabel(status.codexAuth, t)} tone={status.codexAuth === 'logged in' ? 'ok' : 'warn'} />
           </section>
+          <div className="detail-actions">
+            <button className="ghost" disabled={busy} onClick={() => window.hermes.openLabFolder()}>
+              <FolderOpen size={16} /> {t.labFolder}
+            </button>
+          </div>
           <HistoryList history={history} t={t} />
         </section>
       ) : null}
