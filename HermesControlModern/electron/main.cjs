@@ -549,6 +549,7 @@ async function updateAppSettings(patch = {}) {
   const before = readSettings();
   const next = { ...before };
   if (typeof patch.language === 'string') next.language = patch.language;
+  if (typeof patch.theme === 'string') next.theme = patch.theme;
   if (typeof patch.autoServerEnabled === 'boolean') next.autoServerEnabled = patch.autoServerEnabled;
   if (typeof patch.turnOffDisplayOnServer === 'boolean') next.turnOffDisplayOnServer = patch.turnOffDisplayOnServer;
   if (typeof patch.autoRestartEnabled === 'boolean') next.autoRestartEnabled = patch.autoRestartEnabled;

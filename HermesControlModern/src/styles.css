@@ -1888,6 +1888,14 @@ footer strong {
 
 }
 
+:root:not([data-theme="dark"]) footer span {
+  color: #1f2937;
+}
+
+:root:not([data-theme="dark"]) footer strong {
+  color: #020617;
+}
+
 :root:not([data-theme="dark"]) .brand-mark,
   :root:not([data-theme="dark"]) .stat-icon,
   :root:not([data-theme="dark"]) .panel-icon,
@@ -2250,6 +2258,14 @@ footer strong {
   :root[data-theme="light"] .pf-none,
   :root[data-theme="light"] footer {    color: #111827;
 
+}
+
+:root[data-theme="light"] footer span {
+  color: #1f2937;
+}
+
+:root[data-theme="light"] footer strong {
+  color: #020617;
 }
 
 :root[data-theme="light"] .brand-mark,
