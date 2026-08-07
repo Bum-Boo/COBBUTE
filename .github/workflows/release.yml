@@ -1,0 +1,107 @@
+name: Release desktop apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+defaults:
+  run:
+    working-directory: HermesControlModern
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: HermesControlModern/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npm run release:verify
+
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: HermesControlModern/package-lock.json
+      - run: npm ci
+      - run: npm run dist:win
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - run: node scripts/create-checksums.mjs release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            HermesControlModern/release/*.exe
+            HermesControlModern/release/SHA256SUMS.txt
+          if-no-files-found: error
+
+  linux:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: HermesControlModern/package-lock.json
+      - run: npm ci
+      - run: npm run dist:linux
+      - run: node scripts/create-checksums.mjs release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            HermesControlModern/release/*.AppImage
+            HermesControlModern/release/*.deb
+            HermesControlModern/release/SHA256SUMS.txt
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          path: release
+          merge-multiple: true
+      - run: node scripts/create-checksums.mjs ../release
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: 'release/*'
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          flags=(--draft --generate-notes --title "AI Framework Controller ${tag}")
+          if [[ "$tag" == *-* ]]; then flags+=(--prerelease); fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" ../release/* --clobber
+          else
+            gh release create "$tag" ../release/* "${flags[@]}"
+          fi
