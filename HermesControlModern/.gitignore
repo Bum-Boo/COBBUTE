@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+preview.png
+*.log
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+builder-debug.yml
+builder-effective-config.yaml
+build/icon-source.png
+build/icon-alpha.png

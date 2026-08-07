@@ -36,6 +36,7 @@ export default function DiagnosticsTab({ t }) {
   };
 
   const wsl = diag && diag.wslConfig;
+  const linux = diag && diag.platform === 'linux' ? diag.linux : null;
   const requests = diag && diag.requests;
   const blockerCategories = requests && requests.categories
     ? Object.entries(requests.categories).filter(([, items]) => items && items.length > 0)
@@ -67,8 +68,14 @@ export default function DiagnosticsTab({ t }) {
         ) : null}
       </Panel>
 
-      <Panel icon={HardDrive} title={t.wslLimits}>
-        {wsl && wsl.exists ? (
+      <Panel icon={HardDrive} title={linux ? 'Linux host' : t.wslLimits}>
+        {linux ? (
+          <div className="kv-grid">
+            <div className="kv"><span>{t.memory}</span><strong>{linux.memory || t.notSet}</strong></div>
+            <div className="kv"><span>{t.processors}</span><strong>{linux.processors || t.notSet}</strong></div>
+            <div className="kv"><span>Kernel</span><strong>{linux.kernel || t.notSet}</strong></div>
+          </div>
+        ) : wsl && wsl.exists ? (
           <div className="kv-grid">
             <div className="kv"><span>{t.memory}</span><strong>{wsl.memory || t.notSet}</strong></div>
             <div className="kv"><span>{t.processors}</span><strong>{wsl.processors || t.notSet}</strong></div>

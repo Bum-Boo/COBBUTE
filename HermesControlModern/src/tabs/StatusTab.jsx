@@ -236,7 +236,7 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
         <div className="hero-body">
           <div>
             <div className="state-title">{stateTitle}</div>
-            <div className="state-message">{t[messageKey]}</div>
+            <div className="state-message">{status.statusMessage || t[messageKey]}</div>
           </div>
           <div className="pulse-wrap">
             <div className="pulse-ring" />
@@ -271,8 +271,8 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
       <ModeCard mode={mode} t={t} busy={busy} onEnter={onEnterServer} onExit={onExitServer} />
 
       <section className="actions">
-        <button className="danger-hard" disabled={busy || !status.wslRunning} onClick={onShutdownWsl} title={t.shutdownWslHint}>
-          <PowerOff size={18} /> {t.shutdownWsl}
+        <button className="danger-hard" disabled={busy || !status.wslRunning} onClick={onShutdownWsl} title={status.shutdownHint || t.shutdownWslHint}>
+          <PowerOff size={18} /> {status.shutdownLabel || t.shutdownWsl}
         </button>
         <button className={`ghost details-toggle ${detailsOpen ? 'open' : ''}`} disabled={busy} onClick={() => setDetailsOpen((v) => !v)}>
           <ChevronDown size={18} /> {detailsOpen ? t.detailsClose : t.detailsOpen}
@@ -285,7 +285,7 @@ export default function StatusTab({ status, mode, history, summary, frameworks, 
       {detailsOpen ? (
         <section className="status-details" aria-label={t.statusDetailsLabel}>
           <section className="grid sub-grid">
-            <StatCard icon={Server} label={t.wslUbuntu} value={status.wslRunning ? t.running : t.stopped} tone={status.wslRunning ? 'ok' : 'off'} />
+            <StatCard icon={Server} label={status.hostLabel || t.wslUbuntu} value={status.wslRunning ? t.running : t.stopped} tone={status.wslRunning ? 'ok' : 'off'} />
             <StatCard icon={Activity} label={t.dashboard} value={status.dashboardOnline ? t.online : t.offline} tone={status.dashboardOnline ? 'ok' : 'off'} />
             <StatCard icon={Bell} label={t.gateway} value={serviceLabel(status.gateway, t)} tone={status.gateway === 'active' ? 'ok' : 'neutral'} />
             <StatCard icon={ShieldCheck} label={t.codexOAuth} value={serviceLabel(status.codexAuth, t)} tone={status.codexAuth === 'logged in' ? 'ok' : 'warn'} />

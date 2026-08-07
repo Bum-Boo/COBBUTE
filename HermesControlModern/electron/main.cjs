@@ -86,6 +86,7 @@ let watchdogRunning = false;
 let logStreamer = null;
 let currentStatus = null;
 let currentMode = null;
+let shutdownInProgress = false;
 
 function sendToWindow(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -684,11 +685,53 @@ async function publishStatus({ notify = false } = {}) {
 
 function reconcileWatchdogWithStatus(status) {
   if (!watchdog) return;
+  if (shutdownInProgress) {
+    stopWatchdogIfRunning();
+    return;
+  }
   if (status && status.wslRunning) {
     startWatchdogIfNeeded();
     return;
   }
   stopWatchdogIfRunning();
+}
+
+function wslOffStatus() {
+  return {
+    wslRunning: false,
+    dashboardOnline: false,
+    gateway: 'WSL off',
+    codexAuth: isConnectionConfigured() ? 'WSL off' : 'not configured',
+    ready: false,
+    connection: connectionSummary(),
+    checkedAt: new Date().toISOString()
+  };
+}
+
+function publishExplicitStatus(status, { notify = false } = {}) {
+  currentStatus = status;
+  reconcileWatchdogWithStatus(status);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('hermes:statusChanged', status);
+  }
+  if (notify && lastReady !== null && lastReady !== status.ready) {
+    new Notification({
+      title: status.ready ? 'AI Framework Controller connected' : 'AI Framework Controller disconnected',
+      body: status.ready ? 'Dashboard and Codex OAuth are online.' : 'Hermes is stopped or partially disconnected.'
+    }).show();
+  }
+  lastReady = status.ready;
+  applyTray();
+  return status;
+}
+
+async function waitForWslStopped(timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isWslRunning())) return true;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return !(await isWslRunning());
 }
 
 function startWatchdogIfNeeded() {
@@ -809,14 +852,31 @@ async function stopFramework(id) {
 // a chance to finalize sessions instead of being hard-killed mid-write.
 async function shutdownWsl() {
   if (!isConnectionConfigured()) return publishStatus({ notify: false });
-  await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
-  // Best-effort graceful gateway stop before pulling the VM out from under them.
-  await runWsl(`HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
-  await run(wslPath(), ['--shutdown'], 25000);
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  const status = await publishStatus({ notify: true });
-  new Notification({ title: 'WSL', body: mainStrings().wslShutdownNotice }).show();
-  return status;
+  shutdownInProgress = true;
+  stopWatchdogIfRunning();
+  try {
+    await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
+    // Best-effort graceful gateway/service stop before pulling the VM out from
+    // under them. Stop every profile-owned gateway unit explicitly so
+    // Restart=always units do not fight a user-requested WSL shutdown during the
+    // short teardown window. Enabled units still start normally on the next WSL
+    // boot; this is only a current-session stop.
+    const gracefulStop = [
+      'systemctl --user stop hermes-dashboard.service >/dev/null 2>&1 || true',
+      "systemctl --user stop 'hermes-gateway*.service' >/dev/null 2>&1 || true",
+      'systemctl --user stop openclaw-gateway.service >/dev/null 2>&1 || true',
+      `HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || true`
+    ].join('; ');
+    await runWsl(gracefulStop, 18000).catch(() => {});
+    await run(wslPath(), ['--shutdown'], 25000);
+    const stopped = await waitForWslStopped(15000);
+    const status = stopped ? wslOffStatus() : await getStatus();
+    publishExplicitStatus(status, { notify: true });
+    new Notification({ title: 'WSL', body: mainStrings().wslShutdownNotice }).show();
+    return status;
+  } finally {
+    shutdownInProgress = false;
+  }
 }
 
 function makeTrayImage(color = '#6b7280') {
@@ -882,7 +942,7 @@ function buildTrayMenu() {
       ? { label: 'Return to user mode', click: () => modeManager && modeManager.exitServerMode() }
       : { label: 'Enter server mode', click: () => modeManager && modeManager.enterServerMode() },
     { type: 'separator' },
-    { label: 'Open Dashboard', click: () => shell.openExternal(CONFIG.dashboardUrl) },
+    { label: 'Open Dashboard', click: () => openFrameworkDashboard('hermes') },
     { label: 'Open Lab Folder', click: () => shell.openPath(CONFIG.labUnc) },
     { type: 'separator' },
     { label: 'Quit Controller', click: () => app.quit() }
@@ -911,7 +971,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   });
 
@@ -972,9 +1033,20 @@ function dashboardUrlForFramework(id) {
   return '';
 }
 
+function isSafeLocalDashboardUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ['http:', 'https:'].includes(parsed.protocol)
+      && ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function openFrameworkDashboard(id) {
   const url = dashboardUrlForFramework(id);
   if (!url) return { ok: false, error: 'unknown framework dashboard' };
+  if (!isSafeLocalDashboardUrl(url)) return { ok: false, error: 'Dashboard URL must use a loopback host.' };
   shell.openExternal(url);
   return { ok: true, url };
 }

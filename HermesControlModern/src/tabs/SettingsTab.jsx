@@ -140,6 +140,7 @@ function WslMemoryPanel({ t, onToast }) {
 }
 
 function ConnectionPanel({ settings, settingsBusy, t, onUpdate, onToast }) {
+  const linux = settings.runtimePlatform === 'linux';
   const [draft, setDraft] = useState({
     wslDistro: settings.wslDistro || 'Ubuntu',
     labRoot: settings.labRoot || '',
@@ -174,15 +175,15 @@ function ConnectionPanel({ settings, settingsBusy, t, onUpdate, onToast }) {
     <Panel
       icon={Settings}
       title={t.connectionTitle}
-      subtitle={configured ? t.connectionSubtitleConfigured(settings.wslDistro, settings.labRoot) : t.connectionSubtitleUnconfigured}
+      subtitle={configured ? t.connectionSubtitleConfigured(linux ? 'Linux' : settings.wslDistro, settings.labRoot) : t.connectionSubtitleUnconfigured}
     >
       <div className="connection-notice">
-        {t.connectionNotice}
+        {linux ? 'Linux host paths. Hermes and OpenClaw gateways are controlled with systemd user services.' : t.connectionNotice}
       </div>
       <div className="settings-grid connection-grid">
-        <SettingRow title={t.wslDistro} hint={t.wslDistroHint}>
+        {!linux ? <SettingRow title={t.wslDistro} hint={t.wslDistroHint}>
           <input className="path-input" value={draft.wslDistro} disabled={settingsBusy} onChange={(e) => setField('wslDistro', e.target.value)} placeholder="Ubuntu" />
-        </SettingRow>
+        </SettingRow> : null}
 
         <SettingRow title={t.hermesLabRoot} hint={t.hermesLabRootHint}>
           <input className="path-input" value={draft.labRoot} disabled={settingsBusy} onChange={(e) => setField('labRoot', e.target.value)} placeholder="/home/<user>/hermes-lab" />
@@ -192,17 +193,17 @@ function ConnectionPanel({ settings, settingsBusy, t, onUpdate, onToast }) {
           <input className="path-input" value={draft.hermesHome} disabled={settingsBusy} onChange={(e) => setField('hermesHome', e.target.value)} placeholder="/home/<user>/.hermes" />
         </SettingRow>
 
-        <SettingRow title={t.windowsLabFolder} hint={t.windowsLabFolderHint}>
+        {!linux ? <SettingRow title={t.windowsLabFolder} hint={t.windowsLabFolderHint}>
           <input className="path-input" value={draft.labUnc} disabled={settingsBusy} onChange={(e) => setField('labUnc', e.target.value)} placeholder="\\\\wsl.localhost\\Ubuntu\\home\\<user>\\hermes-lab" />
-        </SettingRow>
+        </SettingRow> : null}
 
         <SettingRow title={t.dashboardUrlLabel} hint={t.dashboardUrlHint}>
           <input className="path-input" value={draft.dashboardUrl} disabled={settingsBusy} onChange={(e) => setField('dashboardUrl', e.target.value)} placeholder="http://127.0.0.1:9119" />
         </SettingRow>
 
-        <SettingRow title={t.dashboardTask} hint={t.dashboardTaskHint}>
+        {!linux ? <SettingRow title={t.dashboardTask} hint={t.dashboardTaskHint}>
           <input className="path-input" value={draft.dashboardTaskName} disabled={settingsBusy} onChange={(e) => setField('dashboardTaskName', e.target.value)} placeholder="Hermes Dashboard 9119" />
-        </SettingRow>
+        </SettingRow> : null}
       </div>
 
       <div className="connection-actions">
@@ -221,7 +222,7 @@ function BasicSettingsPanel({ settings, settingsBusy, t, onUpdate }) {
   return (
     <Panel icon={Settings} title={t.settings} subtitle={t.settingsSubtitle}>
       <div className="settings-grid">
-        <SettingRow title={t.launchOnStartup} hint={t.launchOnStartupHint}>
+        <SettingRow title={t.launchOnStartup} hint={settings.runtimePlatform === 'linux' ? 'Start minimized when the Linux desktop session begins.' : t.launchOnStartupHint}>
           <ToggleSwitch
             checked={settings.startupEnabled}
             disabled={settingsBusy}
@@ -355,6 +356,7 @@ function UpdatePanel({ t, onToast }) {
 
 export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToast }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const linux = settings.runtimePlatform === 'linux';
 
   return (
     <div className="settings-stack">
@@ -372,7 +374,7 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
         <section className="status-details" aria-label={t.detailsSettingsLabel}>
           <ConnectionPanel settings={settings} settingsBusy={settingsBusy} t={t} onUpdate={onUpdate} onToast={onToast} />
 
-          <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
+          {!linux ? <Panel icon={Power} title={t.powerSettings} subtitle={t.powerSettingsSubtitle}>
             <div className="settings-grid">
               <SettingRow title={t.autoServerMode} hint={t.autoServerModeHint}>
                 <ToggleSwitch
@@ -417,7 +419,7 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
                 />
               </SettingRow>
             </div>
-          </Panel>
+          </Panel> : null}
 
           <Panel icon={LifeBuoy} title={t.gatewayRecoveryTitle} subtitle={t.gatewayRecoverySubtitle}>
             <div className="settings-grid">
@@ -445,7 +447,7 @@ export default function SettingsTab({ settings, settingsBusy, t, onUpdate, onToa
             </div>
           </Panel>
 
-          <WslMemoryPanel t={t} onToast={onToast} />
+          {!linux ? <WslMemoryPanel t={t} onToast={onToast} /> : null}
 
           <LogTab t={t} />
         </section>

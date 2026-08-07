@@ -1,61 +1,100 @@
 # AI Framework Controller
 
-Modern Electron + React controller for local Hermes and OpenClaw framework operations.
+Desktop control center for local Hermes profiles and OpenClaw agents.
 
-## Run
+## Downloads
+
+Official releases provide:
+
+- Windows 11 x64 installer (`Setup.exe`)
+- Windows 11 x64 portable executable (`Portable.exe`)
+- Linux x64 AppImage
+- Debian/Ubuntu x64 DEB package
+- SHA-256 checksums and GitHub build provenance
+
+Use only assets attached to the repository's GitHub Releases page.
+
+## Requirements
+
+### Windows
+
+- Windows 11 x64
+- WSL2 with a Linux distribution such as Ubuntu
+- Hermes installed inside WSL and available on `PATH`
+- Optional: OpenClaw installed inside the same WSL distribution
+- `systemd --user` services for gateway control
+
+### Linux
+
+- A modern x64 desktop Linux distribution
+- `systemd --user`
+- Hermes installed locally and available on `PATH`
+- Optional: OpenClaw installed locally and available on `PATH`
+- `tmux`, Python 3, and PyYAML for profile operations
+- Desktop runtime libraries: GTK 3, NSS/NSPR, ALSA, libnotify, XSS, and Xtst
+
+The DEB package declares both the current `t64` library names and their legacy alternatives. AppImage users on a minimal installation may need to install the desktop runtime libraries first.
+
+## First run
+
+Open **Settings > Details** and configure:
+
+- Hermes Lab Root, for example `/home/me/hermes-lab`
+- Hermes Home, for example `/home/me/.hermes`
+- Dashboard URL, normally `http://127.0.0.1:9119`
+- Windows only: WSL distribution and scheduled dashboard task
+
+Settings are stored in Electron's per-user application data directory. They are never packaged into release artifacts.
+
+## Local development
+
+```bash
+npm ci
+npm start
+```
+
+Build the renderer:
+
+```bash
+npm run build
+```
+
+Create Windows packages on Windows:
 
 ```powershell
-npm install
-.\Start-HermesControl.cmd
+npm run dist:win
 ```
 
-## First-run connection setup
+Create Linux packages on Linux:
 
-The controller does **not** assume another user's local directory layout.
-On a new computer, open **Settings → Hermes 연결 경로** and save the local values for that machine:
-
-```text
-WSL distro: Ubuntu
-Hermes Lab Root: /home/<your-wsl-user>/<your-hermes-lab-dir>
-Hermes Home: /home/<your-wsl-user>/.hermes
-Dashboard URL: http://127.0.0.1:9119
-Windows Scheduled Task: Hermes Dashboard 9119
-Windows Lab Folder (optional): \\wsl.localhost\Ubuntu\home\<your-wsl-user>\<your-hermes-lab-dir>
+```bash
+npm run dist:linux
 ```
 
-If your Hermes profile data lives inside a lab checkout, `Hermes Home` may instead be:
+## Release process
 
-```text
-/home/<your-wsl-user>/<your-hermes-lab-dir>/.hermes
-```
+1. Update `CHANGELOG.md` and the version in `package.json`.
+2. Run `npm run build` and `npm run release:verify`.
+3. Push a matching tag, for example `v0.3.0-beta.1`.
+4. GitHub Actions builds Windows and Linux packages and creates a draft release.
+5. Review the attached binaries, checksums, and provenance before publishing the draft.
 
-The saved values are stored in Electron `userData/settings.json` on that computer. Environment variables can still prefill defaults for managed installs:
+Windows code signing is enabled automatically when the repository secrets `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` are configured. Never commit signing certificates or passwords.
 
-```text
-HERMES_WSL_DISTRO
-HERMES_LAB_ROOT
-HERMES_HOME
-HERMES_DASHBOARD_URL
-HERMES_DASHBOARD_TASK_NAME
-HERMES_LAB_UNC
-```
+## Security and privacy
 
-## Features
+- Dashboard access is local by default.
+- The controller does not bundle Hermes profiles, OpenClaw configuration, tokens, or local settings.
+- Profile and framework commands run only on the selected local Windows/WSL or Linux host.
+- Update checks call the GitHub Releases API.
+- Release verification scans source files for common credential formats.
 
-- Glass-style status dashboard.
-- System tray menu.
-- WSL distro running/stopped status.
-- Hermes dashboard online/offline status.
-- Hermes Gateway active/inactive status.
-- Codex OAuth connection status.
-- Start/stop controls.
-- Per-computer Hermes connection settings.
-- Local-only dashboard access at `http://127.0.0.1:9119` by default.
+See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-## Safety
+## Project status
 
-- No public ports.
-- No firewall edits.
-- No cloud API keys.
-- No Codex execution.
-- Stop action terminates only the configured WSL distro, not all WSL distributions.
+`0.3.0-beta.1` is a public beta. Test releases on a non-critical profile before using them for unattended gateways.
+
+## License
+
+Copyright (c) 2026 Bum-Boo. All rights reserved. See [LICENSE](LICENSE).

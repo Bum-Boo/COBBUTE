@@ -10,6 +10,7 @@ import SettingsTab from './tabs/SettingsTab.jsx';
 import './styles.css';
 
 const emptyStatus = {
+  runtimePlatform: 'win32',
   wslRunning: false,
   dashboardOnline: false,
   gateway: 'unknown',
@@ -29,6 +30,7 @@ function applyThemePreference(theme) {
 }
 
 const defaultSettings = {
+  runtimePlatform: 'win32',
   language: 'ko',
   theme: 'system',
   startupEnabled: false,
@@ -213,7 +215,7 @@ function App() {
         setStatus(res.status);
         setMessageKey(messageKeyForStatus(res.status));
       }
-      pushToast(t.wslShutdownDoneToast, 'ok');
+      pushToast(status.runtimePlatform === 'linux' ? 'Gateways stopped' : t.wslShutdownDoneToast, 'ok');
     } finally {
       setBusy(false);
     }
@@ -434,7 +436,7 @@ function App() {
 
       <footer>
         <span>{t.localOnly}</span>
-        <strong>127.0.0.1:9119</strong>
+        <strong>{String(settings.dashboardUrl || 'http://127.0.0.1:9119').replace(/^https?:\/\//, '')}</strong>
         <span>{t.lastChecked} {formatTime(status.checkedAt)}</span>
       </footer>
 

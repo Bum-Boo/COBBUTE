@@ -1,22 +1,40 @@
 {
   "name": "ai-framework-controller",
-  "version": "0.2.2",
+  "version": "0.3.0-beta.1",
   "private": true,
   "description": "Modern local controller for Hermes and OpenClaw frameworks",
-  "main": "electron/main.cjs",
+  "author": "Bum-Boo",
+  "desktopName": "AI Framework Controller",
+  "main": "electron/bootstrap.cjs",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/Bum-Boo/COBBUTE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bum-Boo/COBBUTE.git"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5179",
     "electron": "electron .",
     "start": "electron .",
-    "build": "vite build"
+    "build": "vite build",
+    "dist:win": "npm run build && electron-builder --config electron-builder.yml --win nsis portable --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --config electron-builder.yml --linux AppImage deb --x64 --publish never",
+    "release:verify": "node scripts/verify-release.mjs",
+    "release:checksums": "node scripts/create-checksums.mjs release"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "6.0.2",
-    "electron": "42.3.3",
     "lucide-react": "1.17.0",
-    "vite": "8.0.16",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.0.2",
+    "electron": "42.8.1",
+    "electron-builder": "26.15.3",
+    "vite": "8.0.16"
+  },
+  "overrides": {
+    "postcss": "8.5.26",
+    "undici": "7.29.0"
+  }
 }

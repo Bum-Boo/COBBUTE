@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible controller problem
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows 11 with WSL2, Linux AppImage, Linux DEB]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Controller version
+      placeholder: 0.3.0-beta.1
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Never include bot tokens, API keys, or private profile configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      render: text
