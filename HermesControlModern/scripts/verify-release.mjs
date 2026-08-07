@@ -6,7 +6,7 @@ const required = [
   'README.md', 'CHANGELOG.md', 'LICENSE', 'SECURITY.md', 'SUPPORT.md',
   'electron-builder.yml', 'electron/bootstrap.cjs', 'electron/main.cjs',
   'electron/main-linux.cjs', 'build/icon.png', 'build/icon.ico',
-  '.github/workflows/release.yml'
+  '../.github/workflows/release.yml'
 ];
 const failures = [];
 
