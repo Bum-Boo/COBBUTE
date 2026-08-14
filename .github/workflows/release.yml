@@ -88,7 +88,7 @@ jobs:
           path: release
           merge-multiple: true
       - run: node scripts/create-checksums.mjs ../release
-      - uses: actions/attest-build-provenance@v3
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'release/*'
       - name: Create or update draft release
