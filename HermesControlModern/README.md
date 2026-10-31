@@ -48,15 +48,19 @@ Settings are stored in Electron's per-user application data directory. They are 
 
 ## Local development
 
+The Electron window loads the built renderer from `dist/`, so build it before
+starting the app (and again after renderer changes):
+
 ```bash
 npm ci
+npm run build
 npm start
 ```
 
-Build the renderer:
+Run the unit tests:
 
 ```bash
-npm run build
+npm test
 ```
 
 Create Windows packages on Windows:
