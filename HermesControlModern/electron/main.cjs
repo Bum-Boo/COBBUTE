@@ -526,7 +526,8 @@ function recreateHermesClients() {
   }
 }
 
-async function updateAppSettings(patch = {}) {
+async function updateAppSettings(rawPatch) {
+  const patch = rawPatch && typeof rawPatch === 'object' ? rawPatch : {};
   const before = readSettings();
   const next = { ...before };
   if (typeof patch.language === 'string') next.language = patch.language;
@@ -569,7 +570,11 @@ async function updateAppSettings(patch = {}) {
 
 function checkHttp(url, timeoutMs = 3000) {
   return new Promise((resolve) => {
-    const request = http.get(url, { timeout: timeoutMs }, (response) => {
+    let parsed;
+    try { parsed = new URL(url); } catch { resolve(false); return; }
+    const client = parsed.protocol === 'https:' ? https : parsed.protocol === 'http:' ? http : null;
+    if (!client) { resolve(false); return; }
+    const request = client.get(parsed, { timeout: timeoutMs }, (response) => {
       response.resume();
       resolve(response.statusCode === 200);
     });
@@ -584,7 +589,8 @@ function checkHttp(url, timeoutMs = 3000) {
 async function isWslRunning() {
   const result = await run(wslPath(), ['-l', '-v'], 6000);
   const text = `${result.stdout}\n${result.stderr}`.replace(/\0/g, '');
-  return new RegExp(`^\\s*\\*?\\s*${CONFIG.distro}\\s+Running\\s+2\\s*$`, 'm').test(text);
+  const distro = CONFIG.distro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*\\*?\\s*${distro}\\s+Running\\s+2\\s*$`, 'm').test(text);
 }
 
 async function getGatewayStatus(wslRunning) {
@@ -780,7 +786,7 @@ async function listFrameworksIfWslRunning() {
 
 async function startHermes() {
   if (!isConnectionConfigured()) return publishStatus({ notify: false });
-  await runPowerShell(`Start-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000);
+  await runPowerShell(`Start-ScheduledTask -TaskName '${psSingleQuote(CONFIG.dashboardTaskName)}'`, 10000);
   await new Promise((resolve) => setTimeout(resolve, 3000));
   await runWsl(`cd ${shQuote(CONFIG.labRoot)} && HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway status >/dev/null 2>&1 || true`, 12000);
   const status = await publishStatus({ notify: true });
@@ -790,7 +796,7 @@ async function startHermes() {
 
 async function stopHermes() {
   if (!isConnectionConfigured()) return publishStatus({ notify: false });
-  await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
+  await runPowerShell(`Stop-ScheduledTask -TaskName '${psSingleQuote(CONFIG.dashboardTaskName)}'`, 10000).catch(() => {});
   await runWsl(`systemctl --user stop hermes-dashboard.service >/dev/null 2>&1 || true; HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || systemctl --user stop hermes-gateway.service >/dev/null 2>&1 || true`, 15000);
   await new Promise((resolve) => setTimeout(resolve, 1500));
   const status = await publishStatus({ notify: true });
@@ -835,7 +841,7 @@ async function shutdownWsl() {
   shutdownInProgress = true;
   stopWatchdogIfRunning();
   try {
-    await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
+    await runPowerShell(`Stop-ScheduledTask -TaskName '${psSingleQuote(CONFIG.dashboardTaskName)}'`, 10000).catch(() => {});
     // Best-effort graceful gateway/service stop before pulling the VM out from
     // under them. Stop every profile-owned gateway unit explicitly so
     // Restart=always units do not fight a user-requested WSL shutdown during the
@@ -1128,7 +1134,10 @@ ipcMain.handle('hermes:setProfileLabel', (_event, name, label, desc) => {
   return writeProfileLabel(name, label, desc);
 });
 
-ipcMain.handle('hermes:logStart', (_event, name) => (logStreamer ? logStreamer.start(name) : { ok: false }));
+ipcMain.handle('hermes:logStart', (_event, name) => {
+  if (name !== '__all__' && !isValidProfileName(name)) return invalidProfileResult();
+  return logStreamer ? logStreamer.start(name) : { ok: false };
+});
 ipcMain.handle('hermes:logStop', () => { if (logStreamer) logStreamer.stop(); return { ok: true }; });
 
 // WSL memory allocation lives in %USERPROFILE%\.wslconfig ([wsl2] memory=NGB).
@@ -1154,7 +1163,7 @@ ipcMain.handle('hermes:setWslMemory', async (_event, gb, applyNow) => {
   const res = power.setWslConfigValue('memory', value);
   let restarted = false;
   if (applyNow) {
-    await runPowerShell(`Stop-ScheduledTask -TaskName "${CONFIG.dashboardTaskName}"`, 10000).catch(() => {});
+    await runPowerShell(`Stop-ScheduledTask -TaskName '${psSingleQuote(CONFIG.dashboardTaskName)}'`, 10000).catch(() => {});
     await runWsl(`HERMES_HOME=${shQuote(CONFIG.hermesHome)} hermes gateway stop >/dev/null 2>&1 || true`, 12000).catch(() => {});
     await run(wslPath(), ['--shutdown'], 25000);
     await new Promise((resolve) => setTimeout(resolve, 2000));

@@ -199,7 +199,8 @@ function createClients() {
   });
 }
 
-async function updateSettings(patch = {}) {
+async function updateSettings(rawPatch) {
+  const patch = rawPatch && typeof rawPatch === 'object' ? rawPatch : {};
   const before = readSettings();
   const next = { ...before };
   for (const key of ['language', 'theme', 'dashboardUrl', 'labRoot', 'hermesHome']) {
