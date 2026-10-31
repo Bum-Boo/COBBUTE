@@ -9,6 +9,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from workbot.config import parse_env_value  # noqa: E402
 
 
 def load_env() -> None:
@@ -20,7 +24,7 @@ def load_env() -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        os.environ.setdefault(key.strip(), parse_env_value(value))
 
 
 def main() -> int:

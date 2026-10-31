@@ -11,6 +11,18 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def parse_env_value(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    # Unquoted values may carry a trailing comment: `KEY=value  # note`.
+    for index, char in enumerate(value):
+        if char == "#" and (index == 0 or value[index - 1] in " \t"):
+            value = value[:index]
+            break
+    return value.strip().strip('"').strip("'")
+
+
 def load_dotenv(path: Path | None = None) -> None:
     env_path = path or PROJECT_ROOT / ".env"
     if not env_path.exists():
@@ -21,9 +33,7 @@ def load_dotenv(path: Path | None = None) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+        os.environ.setdefault(key.strip(), parse_env_value(value))
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -31,6 +41,14 @@ def _bool_env(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _int_env(name: str, default: str) -> int:
+    raw = os.getenv(name, default).strip()
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
 
 
 def _path_env(name: str, default: str) -> Path:
@@ -112,8 +130,12 @@ class Settings:
 def load_settings(validate: bool = False) -> Settings:
     load_dotenv()
     owner_raw = os.getenv("BOT_OWNER_TELEGRAM_ID", "").strip()
-    owner_id = int(owner_raw) if owner_raw else None
-    secret = os.getenv("WEBHOOK_SECRET", "").strip() or secrets.token_urlsafe(24)
+    owner_id = _int_env("BOT_OWNER_TELEGRAM_ID", owner_raw) if owner_raw else None
+    # A server must use the configured secret: set_webhook.py registers the URL
+    # with it. Only non-validated callers get a throwaway value.
+    secret = os.getenv("WEBHOOK_SECRET", "").strip()
+    if not secret and not validate:
+        secret = secrets.token_urlsafe(24)
 
     settings = Settings(
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
@@ -123,11 +145,11 @@ def load_settings(validate: bool = False) -> Settings:
         report_time=os.getenv("REPORT_TIME", "18:30").strip(),
         timezone=os.getenv("TIMEZONE", "Asia/Seoul").strip(),
         host=os.getenv("HOST", "127.0.0.1").strip(),
-        port=int(os.getenv("PORT", "8088")),
+        port=_int_env("PORT", "8088"),
         database_path=_path_env("DATABASE_PATH", "data/workbot.sqlite3"),
         resource_manager_path=_path_env("RESOURCE_MANAGER_PATH", "../local-ai-resource-manager.ps1"),
         powershell_exe=os.getenv("POWERSHELL_EXE", "powershell").strip(),
-        llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "180")),
+        llm_timeout_seconds=_int_env("LLM_TIMEOUT_SECONDS", "180"),
         auto_report_enabled=_bool_env("AUTO_REPORT_ENABLED", True),
     )
     settings.report_hour_minute

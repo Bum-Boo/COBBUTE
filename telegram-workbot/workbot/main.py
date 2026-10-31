@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hmac
+import logging
+
 from fastapi import FastAPI, HTTPException, Request
 
 from .bot import Workbot
@@ -11,6 +14,7 @@ from .telegram_api import TelegramClient
 
 
 settings = load_settings(validate=True)
+logger = logging.getLogger(__name__)
 app = FastAPI(title="Telegram Local LLM Workbot", version="0.1.0")
 
 
@@ -39,14 +43,21 @@ async def shutdown() -> None:
 
 @app.get("/healthz")
 async def healthz() -> dict:
-    return {"ok": True, "webhook_path": settings.webhook_path}
+    # The webhook path embeds WEBHOOK_SECRET, so it must not be published here.
+    return {"ok": True}
 
 
 @app.post("/telegram/webhook/{secret}")
 async def telegram_webhook(secret: str, request: Request) -> dict:
-    if secret != settings.webhook_secret:
+    if not hmac.compare_digest(secret.encode("utf-8"), settings.webhook_secret.encode("utf-8")):
         raise HTTPException(status_code=404, detail="Not found")
     payload = await request.json()
-    await app.state.bot.handle_update(payload)
+    try:
+        await app.state.bot.handle_update(payload)
+    except Exception:
+        # A non-2xx response makes Telegram redeliver the update, which would
+        # store the same note or attendance record again.
+        update_id = payload.get("update_id") if isinstance(payload, dict) else None
+        logger.exception("Failed to handle Telegram update %s", update_id)
     return {"ok": True}
 
