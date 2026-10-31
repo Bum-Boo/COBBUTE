@@ -53,6 +53,14 @@ function createHermesAdapter(runWsl, config) {
     return typeof name === 'string' && /^[A-Za-z0-9_-]+$/.test(name);
   }
 
+  // Backups are written as `<YYYYmmdd>-<HHMMSS>-<profile>`; require that exact
+  // shape so profile `b` never matches a backup taken from profile `team-b`.
+  function isBackupIdForProfile(backupId, name) {
+    return typeof backupId === 'string'
+      && isValidProfileName(name)
+      && new RegExp(`^\\d{8}-\\d{6}-${name}$`).test(backupId);
+  }
+
   // wsl.exe (via execFile) strips `$var`/`$(...)` from the inline command
   // string before bash sees them. Any script that needs shell variables must
   // be smuggled in base64 (which has no `$`) and decoded by an inner bash.
@@ -266,7 +274,7 @@ base = Path(os.environ.get('HERMES_HOME', '')).expanduser() / 'backups' / 'contr
 items = []
 if base.exists():
     for d in base.iterdir():
-        if not d.is_dir() or not d.name.endswith('-' + name):
+        if not d.is_dir() or not re.fullmatch(r'\\d{8}-\\d{6}-' + re.escape(name), d.name):
             continue
         cfg = d / 'config.yaml'
         if not cfg.exists():
@@ -284,7 +292,7 @@ PY`;
   async function restoreProfileBackup(name, backupId) {
     if (!configured) return { ok: false, error: 'Hermes connection is not configured.' };
     if (!isValidProfileName(name)) return { ok: false, error: 'invalid profile name' };
-    if (!backupId || !/^[A-Za-z0-9_-]+$/.test(backupId) || !backupId.endsWith(`-${name}`)) return { ok: false, error: 'invalid backup id' };
+    if (!isBackupIdForProfile(backupId, name)) return { ok: false, error: 'invalid backup id' };
     const script = [
       'set -euo pipefail',
       `backup=${shellQuote(`${home}/backups/controller-profile-models/${backupId}/config.yaml`)}`,
