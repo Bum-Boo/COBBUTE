@@ -46,13 +46,26 @@ class TelegramClient:
             raise RuntimeError(f"Telegram API HTTP {exc.code}: {body}") from exc
 
 
+def _utf16_len(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
 def _chunk_message(text: str, limit: int = 3500) -> list[str]:
-    if len(text) <= limit:
+    # Telegram's 4096-character limit counts UTF-16 code units, so characters
+    # outside the BMP (most emoji) count twice.
+    if _utf16_len(text) <= limit:
         return [text]
     chunks: list[str] = []
-    remaining = text
-    while remaining:
-        chunks.append(remaining[:limit])
-        remaining = remaining[limit:]
+    current: list[str] = []
+    size = 0
+    for char in text:
+        width = 2 if ord(char) > 0xFFFF else 1
+        if size + width > limit:
+            chunks.append("".join(current))
+            current, size = [], 0
+        current.append(char)
+        size += width
+    if current:
+        chunks.append("".join(current))
     return chunks
 

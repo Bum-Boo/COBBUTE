@@ -28,6 +28,8 @@ def parse_month_arg(value: str, today: date) -> tuple[int, int]:
         raise ValueError("month must be YYYY-MM")
     year = int(parts[0])
     month = int(parts[1])
+    if not 1 <= year <= 9998:
+        raise ValueError("year must be 1-9998")
     if not 1 <= month <= 12:
         raise ValueError("month must be 1-12")
     return year, month

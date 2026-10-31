@@ -27,7 +27,8 @@ def parse_command(text: str) -> ParsedCommand | None:
     if not stripped.startswith("/"):
         return None
 
-    token, _, args = stripped.partition(" ")
+    token, *rest = stripped.split(maxsplit=1)
+    args = rest[0] if rest else ""
     command = token[1:]
     command = command.split("@", 1)[0]
     if not command:

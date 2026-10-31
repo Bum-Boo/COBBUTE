@@ -35,10 +35,14 @@ class Workbot:
             return
 
         chat = message.get("chat") or {}
-        chat_id = int(chat.get("id"))
-        chat_type = str(chat.get("type") or "")
         user = message.get("from") or {}
-        user_id = int(user.get("id"))
+        # Channel posts and anonymous admins carry no sender id; ignore them
+        # instead of failing the webhook (Telegram would redeliver it).
+        if chat.get("id") is None or user.get("id") is None:
+            return
+        chat_id = int(chat["id"])
+        chat_type = str(chat.get("type") or "")
+        user_id = int(user["id"])
 
         if self.settings.bot_owner_telegram_id is None or user_id != self.settings.bot_owner_telegram_id:
             await self.telegram.send_message(chat_id, "권한이 없습니다. 이 봇은 등록된 소유자 DM 전용입니다.")
