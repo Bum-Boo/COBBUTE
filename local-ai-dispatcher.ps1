@@ -172,8 +172,9 @@ function Resolve-Intent {
         (New-HangulWord "11,20,4;11,12,21"),
         (New-HangulWord "11,4,17;5,8,0;3,18,0")
     )
+    # No generic "image" word here: it is shared with vision requests, so only
+    # generation-specific words decide between the two below.
     $comfyKo = @(
-        (New-HangulWord "11,20,0;6,20,0;12,20,0"),
         (New-HangulWord "9,1,21;9,4,21"),
         (New-HangulWord "0,18,0;5,20,16"),
         (New-HangulWord "5,5,4;3,4,0"),
@@ -181,19 +182,23 @@ function Resolve-Intent {
         (New-HangulWord "15,4,16;17,20,0")
     )
 
-    if ([string]::IsNullOrWhiteSpace($text) -or ($text -match "status|state|queue|vram|gpu|resource") -or (Test-ContainsAny -Text $Objective -Keywords $statusKo)) {
+    # English keywords match whole words only ("storage" is not "rag").
+    if ([string]::IsNullOrWhiteSpace($text) -or ($text -match "\b(status|state|queue|vram|gpu|resources?)\b") -or (Test-ContainsAny -Text $Objective -Keywords $statusKo)) {
         return "status"
     }
-    if (($text -match "embedding|embed|index|vector") -or (Test-ContainsAny -Text $Objective -Keywords $embeddingKo)) {
+    if (($text -match "\b(embeddings?|embed|index|vectors?)\b") -or (Test-ContainsAny -Text $Objective -Keywords $embeddingKo)) {
         return "embedding"
     }
-    if (($text -match "rag|document|docs|pdf|source|citation|retrieve|search") -or (Test-ContainsAny -Text $Objective -Keywords $ragKo)) {
+    if (($text -match "\b(rag|documents?|docs?|pdfs?|sources?|citations?|retrieve|search)\b") -or (Test-ContainsAny -Text $Objective -Keywords $ragKo)) {
         return "rag"
     }
-    if (($text -match "screenshot|screen shot|ui capture|image analysis|describe image|vision") -or (Test-ContainsAny -Text $Objective -Keywords $visionKo)) {
+    $visionEn = $text -match "\b(screenshots?|screen shot|ui capture|image analysis|describe image|vision)\b"
+    $comfyEn = $text -match "(\bcomfy|\bstable diffusion\b|\bimage generation\b|\bgenerate (an )?images?\b|\bdraw(s|ing)?\b|\brender(s|ing)?\b)"
+    $comfyKoHit = Test-ContainsAny -Text $Objective -Keywords $comfyKo
+    if ($visionEn -or ((Test-ContainsAny -Text $Objective -Keywords $visionKo) -and -not ($comfyEn -or $comfyKoHit))) {
         return "vision"
     }
-    if (($text -match "comfy|stable diffusion|image generation|generate image|draw|render") -or (Test-ContainsAny -Text $Objective -Keywords $comfyKo)) {
+    if ($comfyEn -or $comfyKoHit) {
         return "comfyui"
     }
     return "text"

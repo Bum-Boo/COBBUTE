@@ -79,6 +79,31 @@ function Get-ScriptFunctions {
     }
 }
 
+# --- dispatcher --------------------------------------------------------------
+& {
+    $dispatcherPath = Join-Path $repoRoot "local-ai-dispatcher.ps1"
+    foreach ($definition in Get-ScriptFunctions $dispatcherPath) { . ([scriptblock]::Create($definition)) }
+
+    $cases = [ordered]@{
+        "ComfyUI 이미지 생성 배치"           = "comfyui"
+        "새 이미지 배치 준비"                = "comfyui"
+        "generate an image of a cat"        = "comfyui"
+        "이미지 분석해줘"                    = "vision"
+        "화면 캡처 설명"                     = "vision"
+        "take a screenshot of the render bug" = "vision"
+        "search the docs"                   = "rag"
+        "GPU status"                        = "status"
+        "Write a paragraph about storage"   = "text"
+        "Summarize the average leverage"    = "text"
+        "Draft a project statement"         = "text"
+        "Translate this drawer label"       = "text"
+        "Fix the reindex job"               = "text"
+    }
+    foreach ($objective in $cases.Keys) {
+        Assert-Equal $cases[$objective] (Resolve-Intent -Objective $objective -RequestedTaskType "auto") "intent of '$objective'"
+    }
+}
+
 Write-Host "# pass $script:passes"
 Write-Host "# fail $script:failures"
 if ($script:failures -gt 0) { exit 1 }
