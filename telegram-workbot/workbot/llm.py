@@ -65,6 +65,8 @@ class ResourceManagerClient:
             payload = json.loads(stdout)
         except json.JSONDecodeError:
             return LLMResult("error", "", "Resource manager returned non-JSON output")
+        if not isinstance(payload, dict):
+            return LLMResult("error", "", "Resource manager returned unexpected JSON")
 
         if payload.get("queued") is True:
             decision = payload.get("decision") or {}
@@ -114,6 +116,8 @@ class ResourceManagerClient:
             payload = json.loads(completed.stdout)
         except json.JSONDecodeError:
             return False, "Resource manager returned non-JSON status"
+        if not isinstance(payload, dict):
+            return False, "Resource manager returned unexpected JSON status"
 
         text_route = payload.get("text_route") or {}
         gpu = payload.get("gpu") or {}

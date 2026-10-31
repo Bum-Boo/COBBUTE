@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date, datetime
 
@@ -118,16 +119,17 @@ class Workbot:
             await self.telegram.send_message(chat_id, "날짜 형식이 올바르지 않습니다. 예: /보고서 오늘, /보고서 어제, /보고서 2026-06-04")
             return
 
-        result = self.reports.generate_daily_report(user_id, target, now, auto=auto)
+        # The resource manager call blocks for up to LLM_TIMEOUT_SECONDS.
+        result = await asyncio.to_thread(self.reports.generate_daily_report, user_id, target, now, auto)
         prefix = "자동 일일보고" if auto else "일일보고"
         status = "" if result.llm_status == "success" else f"\n\nLLM 상태: {result.llm_status} - fallback 보고서 사용"
         await self.telegram.send_message(chat_id, f"{prefix}\n\n{result.content}{status}")
 
     async def _summary(self, chat_id: int, user_id: int, text: str, now: datetime) -> None:
         if text.strip():
-            result = self.reports.summarize_text(now.date(), text)
+            result = await asyncio.to_thread(self.reports.summarize_text, now.date(), text)
         else:
-            result = self.reports.summarize_today_notes(user_id, now.date())
+            result = await asyncio.to_thread(self.reports.summarize_today_notes, user_id, now.date())
         status = "" if result.llm_status == "success" else f"\n\nLLM 상태: {result.llm_status} - fallback 요약 사용"
         await self.telegram.send_message(chat_id, f"{result.content}{status}")
 
@@ -143,7 +145,7 @@ class Workbot:
 
     async def _status(self, chat_id: int) -> None:
         db_ok = self.settings.database_path.exists()
-        manager_ok, manager_text = self.llm.status_json()
+        manager_ok, manager_text = await asyncio.to_thread(self.llm.status_json)
         try:
             webhook_info = await self.telegram.get_webhook_info()
             if webhook_info.ok:

@@ -18,7 +18,16 @@ def install_scheduler(app, bot, settings: Settings):
 
     scheduler = AsyncIOScheduler(timezone=settings.tzinfo)
     if settings.auto_report_enabled:
-        scheduler.add_job(bot.send_auto_report, "cron", **scheduler_cron_kwargs(settings))
+        scheduler.add_job(
+            bot.send_auto_report,
+            "cron",
+            id="daily_report",
+            replace_existing=True,
+            # APScheduler's default grace is 1s; a late start would silently skip the day.
+            misfire_grace_time=3600,
+            coalesce=True,
+            **scheduler_cron_kwargs(settings),
+        )
     scheduler.start()
     app.state.scheduler = scheduler
     return scheduler
