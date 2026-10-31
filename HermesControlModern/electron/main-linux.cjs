@@ -374,6 +374,8 @@ async function runFrameworkAction(id, start) {
   }
   await new Promise((resolve) => setTimeout(resolve, 900));
   const status = await publishStatus({ notifyChange: true });
+  // stopAllGateways() halts the watchdog; starting a framework re-arms it.
+  if (watchdog && start) watchdog.start();
   if (watchdog) watchdog.refreshNow();
   return { ok: result.ok, error: result.ok ? '' : result.error, status };
 }
@@ -460,10 +462,15 @@ function clearRestart(name) {
 
 async function setProfileModelSettings(name, patch) {
   if (!validProfile(name) || !adapter) return { ok: false, error: 'invalid profile or adapter unavailable' };
+  const beforeList = await adapter.listProfiles();
+  const before = beforeList && Array.isArray(beforeList.profiles)
+    ? beforeList.profiles.find((p) => p.name === name)
+    : null;
   const result = await adapter.setProfileModelSettings(name, patch);
   if (result.ok) {
     const fields = Object.keys(patch || {});
-    markRestart(name, fields);
+    // Only a running gateway has stale settings loaded, matching main.cjs.
+    if (before && before.running && fields.length) markRestart(name, fields);
     appendHistory({ profile: name, action: 'settings.update', fields });
   }
   return result;
@@ -608,7 +615,7 @@ ipcMain.handle('hermes:getProfileLogSummary', (_event, name) => validProfile(nam
 ipcMain.handle('hermes:useProfile', (_event, name) => validProfile(name) && adapter ? adapter.useProfile(name) : { ok: false });
 ipcMain.handle('hermes:gatewayStart', async (_event, name) => {
   if (!validProfile(name) || !adapter) return { ok: false };
-  if (watchdog) watchdog.setDesired(name, true);
+  if (watchdog) { watchdog.setDesired(name, true); watchdog.start(); }
   const result = await adapter.gatewayStartProfile(name);
   if (result.ok) { clearRestart(name); appendHistory({ profile: name, action: 'gateway.start' }); }
   if (watchdog) setTimeout(() => watchdog.refreshNow(), 1800);
