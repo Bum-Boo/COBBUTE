@@ -13,6 +13,7 @@ const { createModeManager } = require('./mode-manager.cjs');
 const { createGatewayWatchdog } = require('./gateway-watchdog.cjs');
 const { createLogStreamer } = require('./log-streamer.cjs');
 const { makeMainStrings } = require('./i18n.cjs');
+const { compareVersions } = require('./version.cjs');
 
 // Keep the persisted controller identity stable even though the visible product
 // name changed from Hermes Lab Controller to AI Framework Controller. Electron's
@@ -146,27 +147,6 @@ function requestJson(url, timeoutMs = 10000) {
     req.on('timeout', () => req.destroy(new Error('request timed out')));
     req.on('error', (error) => resolve({ ok: false, status: 0, error: error.message }));
   });
-}
-
-function comparableVersion(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[+-]/)[0]
-    .split('.')
-    .map((part) => Number.parseInt(part, 10))
-    .filter((part) => Number.isFinite(part));
-}
-
-function compareVersions(a, b) {
-  const left = comparableVersion(a);
-  const right = comparableVersion(b);
-  const len = Math.max(left.length, right.length, 3);
-  for (let i = 0; i < len; i += 1) {
-    const diff = (left[i] || 0) - (right[i] || 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
 }
 
 function getAppInfo() {

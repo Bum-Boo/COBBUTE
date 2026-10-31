@@ -8,6 +8,7 @@ const { createHermesAdapter } = require('./hermes-adapter.cjs');
 const { createOpenClawAdapter } = require('./openclaw-adapter.cjs');
 const { createGatewayWatchdog } = require('./gateway-watchdog.cjs');
 const { createLinuxLogStreamer } = require('./log-streamer-linux.cjs');
+const { compareVersions } = require('./version.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const RELEASE_REPO = process.env.HERMES_CONTROLLER_RELEASE_REPO || 'Bum-Boo/COBBUTE';
@@ -236,15 +237,6 @@ function requestJson(url, timeoutMs = 10000) {
     request.on('timeout', () => { request.destroy(); resolve({ ok: false, status: 0, error: 'request timed out' }); });
     request.on('error', (error) => resolve({ ok: false, status: 0, error: error.message }));
   });
-}
-
-function compareVersions(a, b) {
-  const left = String(a).replace(/^v/, '').split(/[.-]/).map((x) => Number(x) || 0);
-  const right = String(b).replace(/^v/, '').split(/[.-]/).map((x) => Number(x) || 0);
-  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
-    if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) < (right[i] || 0) ? -1 : 1;
-  }
-  return 0;
 }
 
 async function checkForUpdates() {

@@ -19,6 +19,7 @@
     "build": "vite build",
     "dist:win": "npm run build && electron-builder --config electron-builder.yml --win nsis portable --x64 --publish never",
     "dist:linux": "npm run build && electron-builder --config electron-builder.yml --linux AppImage deb --x64 --publish never",
+    "test": "node --test \"test/*.test.cjs\"",
     "release:verify": "node scripts/verify-release.mjs",
     "release:checksums": "node scripts/create-checksums.mjs release"
   },
