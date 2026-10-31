@@ -49,7 +49,7 @@ function Read-JsonFile {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Required file not found: $Path"
     }
-    return Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+    return Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json
 }
 
 function Invoke-ManagerText {

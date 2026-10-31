@@ -96,7 +96,7 @@ function Get-ManagerConfig {
         $defaultConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $resolvedPath -Encoding UTF8
     }
 
-    return (Get-Content -Raw -LiteralPath $resolvedPath | ConvertFrom-Json)
+    return (Get-Content -Raw -Encoding UTF8 -LiteralPath $resolvedPath | ConvertFrom-Json)
 }
 
 function Get-ConfigString {
@@ -384,7 +384,9 @@ function Get-CoordinatorState {
     }
 
     try {
-        $state = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
+        # Written as UTF-8 without BOM; Windows PowerShell 5.1 would otherwise read
+        # it in the ANSI code page and a Korean note would reset the turn flags.
+        $state = Get-Content -Raw -Encoding UTF8 -LiteralPath $statePath | ConvertFrom-Json
     }
     catch {
         $state = New-CoordinatorState | ConvertTo-Json -Depth 8 | ConvertFrom-Json
@@ -793,7 +795,7 @@ function Get-QueuedTasks {
         return @()
     }
 
-    $lines = Get-Content -LiteralPath $queuePath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $lines = Get-Content -Encoding UTF8 -LiteralPath $queuePath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     $tasks = foreach ($line in $lines) {
         try {
             $line | ConvertFrom-Json
@@ -846,13 +848,14 @@ function Invoke-OllamaEmbed {
     param(
         $Config,
         [string]$Model,
-        [string]$Input
+        # Not `$Input`: that is an automatic variable and would always be empty.
+        [string]$Text
     )
 
     $apiUrl = ([string]$Config.ollama_api).TrimEnd("/")
     $body = [ordered]@{
         model = $Model
-        input = $Input
+        input = $Text
         keep_alive = [string]$Config.keep_alive
         options = @{
             num_ctx = [int]$Config.default_context_length
@@ -896,7 +899,7 @@ function Invoke-RoutedTask {
     }
 
     if ($TaskType -eq "embedding") {
-        $result = Invoke-OllamaEmbed -Config $Config -Model $decision.model -Input $Prompt
+        $result = Invoke-OllamaEmbed -Config $Config -Model $decision.model -Text $Prompt
         if ($Json) {
             [pscustomobject]@{
                 decision = $decision
