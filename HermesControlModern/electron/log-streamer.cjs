@@ -12,6 +12,10 @@
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 
+function shQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
 function b64wrap(script) {
   const b64 = Buffer.from(script, 'utf8').toString('base64');
   return `echo ${b64} | base64 -d | bash`;
@@ -35,14 +39,18 @@ function createLogStreamer(deps) {
 
   function start(name = '__all__') {
     stop();
+    if (typeof name !== 'string' || (name !== '__all__' && !/^[A-Za-z0-9_-]+$/.test(name))) {
+      return { ok: false, error: 'invalid profile name' };
+    }
     current = name;
     const streamName = name;
     let script;
     if (name === '__all__') {
-      script = `python3 - <<'PY'
+      // Hermes Home reaches Python through the environment, never the script text.
+      script = `HERMES_LOG_HOME=${shQuote(hermesHome)} python3 - <<'PY'
 import os, subprocess, sys
 from pathlib import Path
-home = Path(os.path.expandvars('${hermesHome}')).expanduser() / 'profiles'
+home = Path(os.path.expandvars(os.environ.get('HERMES_LOG_HOME', ''))).expanduser() / 'profiles'
 files = []
 if home.exists():
     for profile in sorted(p for p in home.iterdir() if p.is_dir()):
@@ -68,10 +76,10 @@ for raw in proc.stdout:
     print(f'[{prefix}] {line}', flush=True)
 PY`;
     } else {
-      const base = `${hermesHome}/profiles/${name}/logs`;
       script =
-        `f="${base}/gateway.log"; ` +
-        `if [ ! -s "$f" ]; then f="${base}/gateway.controller.log"; fi; ` +
+        `base=${shQuote(`${hermesHome}/profiles/${name}/logs`)}; ` +
+        `f="$base/gateway.log"; ` +
+        `if [ ! -s "$f" ]; then f="$base/gateway.controller.log"; fi; ` +
         `tail -n 250 -F "$f" 2>/dev/null`;
     }
 
