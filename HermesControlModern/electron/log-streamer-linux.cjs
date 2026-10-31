@@ -35,20 +35,23 @@ function createLinuxLogStreamer({ hermesHome, onLine, onEnd }) {
       'exec tail -n 160 -F "${files[@]}"'
     ].join('; ');
 
-    child = spawn('/bin/bash', ['-lc', script], {
+    const proc = spawn('/bin/bash', ['-lc', script], {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
     });
+    child = proc;
 
-    const stdout = readline.createInterface({ input: child.stdout });
-    const stderr = readline.createInterface({ input: child.stderr });
-    stdout.on('line', (line) => onLine(requestedName, line));
-    stderr.on('line', (line) => onLine(requestedName, line));
-    child.once('close', () => {
-      const endedName = requestedName;
+    // A stopped stream closes asynchronously, possibly after a newer stream has
+    // started; only the stream that still owns `child` may touch shared state.
+    const stdout = readline.createInterface({ input: proc.stdout });
+    const stderr = readline.createInterface({ input: proc.stderr });
+    stdout.on('line', (line) => { if (child === proc) onLine(name, line); });
+    stderr.on('line', (line) => { if (child === proc) onLine(name, line); });
+    proc.once('close', () => {
+      if (child !== proc) return;
       child = null;
       requestedName = null;
-      if (endedName) onEnd(endedName);
+      onEnd(name);
     });
     return { ok: true };
   }
