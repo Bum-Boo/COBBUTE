@@ -12,5 +12,6 @@
 
 ## Verification
 
+- [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run release:verify`
