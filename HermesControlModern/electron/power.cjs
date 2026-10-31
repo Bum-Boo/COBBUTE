@@ -254,8 +254,15 @@ async function getPowerRequestsElevated(helperPath) {
   return { ok: true, accessDenied: false, cancelled: false, categories: parseRequests(raw), raw };
 }
 
+// powershell.exe cannot read files inside app.asar; electron-builder.yml
+// unpacks the helper next to it (asarUnpack), so point at that copy.
+function asarUnpackedPath(filePath) {
+  return filePath.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2');
+}
+
 module.exports = {
   SERVER_PLAN_NAME,
+  asarUnpackedPath,
   getActivePlan,
   listPlans,
   planExists,

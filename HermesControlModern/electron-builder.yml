@@ -11,6 +11,8 @@ files:
   - electron/**/*
   - build/icon.png
   - package.json
+asarUnpack:
+  - electron/powercfg-helper.ps1
 extraMetadata:
   main: electron/bootstrap.cjs
 win:

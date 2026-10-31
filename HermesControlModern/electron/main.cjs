@@ -35,7 +35,7 @@ if (!gotSingleInstanceLock) {
 }
 
 const ROOT = path.resolve(__dirname, '..');
-const HELPER_PS1 = path.join(__dirname, 'powercfg-helper.ps1');
+const HELPER_PS1 = power.asarUnpackedPath(path.join(__dirname, 'powercfg-helper.ps1'));
 const CONFIG = {
   distro: process.env.HERMES_WSL_DISTRO || 'Ubuntu',
   dashboardUrl: process.env.HERMES_DASHBOARD_URL || 'http://127.0.0.1:9119',
