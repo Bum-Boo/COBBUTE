@@ -311,3 +311,11 @@ Append-only log format:
 - Commands run: `.venv\Scripts\python.exe -m pytest`, `python -m pytest`, `.venv\Scripts\python.exe -m compileall workbot scripts`, FastAPI startup/shutdown smoke test with a temporary SQLite database.
 - Result: `/상태` now calls `getWebhookInfo` and includes the Telegram webhook URL/pending count when available, while still reporting DB, public URL config, auto-report schedule, and local resource-manager state. All 16 tests pass in both environments.
 - Next handoff note: Real Telegram webhook verification still needs `telegram-workbot\.env` with the user's bot token, owner Telegram ID, webhook secret, and current Cloudflare Quick Tunnel URL.
+
+### 2026-10-31 - Claude Code (cloud session)
+
+- Intent: Apply the five pending GitHub Actions Dependabot updates together and check repository health.
+- Files changed: `.github/workflows/release.yml`, `.github/dependabot.yml`, `HermesControlModern` (package pins, `electron/*.cjs`, `electron-builder.yml`, README, new `test/`), `telegram-workbot/workbot/*.py`, `telegram-workbot/scripts/*.py`, new `telegram-workbot/tests/test_*.py`, `local-ai-resource-manager.ps1`, `local-ai-dispatcher.ps1`, new `tests/local-ai/LocalAi.Tests.ps1`, `docs/cloud-20261031-cobbute.md`.
+- Commands run: `actionlint`, `npm ci`, `npm audit --audit-level=high`, `npm test`, `npm run build`, `npm run release:verify`, `npm run dist:linux`, `python -m pytest`, `pwsh -File tests/local-ai/LocalAi.Tests.ps1` (Linux VM, PowerShell 7.6.9; no real Telegram/Ollama/ComfyUI/WSL calls).
+- Result: Release workflow was blocked by `npm audit` (8 high) on main; fixed with in-major patch bumps. Fixed verified defects with regression tests (21 Electron, 44 workbot, 17 PowerShell checks). See `docs/cloud-20261031-cobbute.md`.
+- Next handoff note: Windows-only paths (dist:win, WSL, scheduled tasks, Windows PowerShell 5.1, HermesControl.ps1) still need verification on a Windows machine.
